@@ -49,7 +49,7 @@ def extract_city(location_text):
     else:
         return 'Khác'
 
-def crawl_test_10_pages():
+def crawl_test_5_pages():
     print("1. Đang khởi động trình duyệt ảo (Chrome)...")
     options = Options()
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
@@ -62,7 +62,7 @@ def crawl_test_10_pages():
     all_jobs_data = []
     page = 1
     previous_first_link = None 
-    MAX_TEST_PAGES = 10 
+    MAX_TEST_PAGES = 5 
     
     print("==================================================")
     print(f"CHẾ ĐỘ TEST: CHỈ CÀO TỐI ĐA {MAX_TEST_PAGES} TRANG")
@@ -170,4 +170,4 @@ def crawl_test_10_pages():
         print("\nKhông thu thập được dữ liệu nào.")
 
 if __name__ == "__main__":
-    crawl_test_10_pages()
+    crawl_test_5_pages()

@@ -6,7 +6,6 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import time
 import re
-import requests
 
 def extract_level(text):
     text_lower = text.lower()
@@ -34,7 +33,7 @@ def extract_language(text):
     return ", ".join(set(found_langs)) if found_langs else "Không ghi rõ"
 
 def crawl_careerlink():
-    print("1. Đang khởi động Crawler V3 (Bóc tách chuẩn DOM + Pagination thông minh)...")
+    print("1. Đang khởi động Crawler (Selenium Thuần - Chậm rãi & An toàn)...")
     options = Options()
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
@@ -44,47 +43,48 @@ def crawl_careerlink():
     driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
         'source': 'Object.defineProperty(navigator, "webdriver", {get: () => undefined})'
     })
-    driver.set_page_load_timeout(30)
+    driver.set_page_load_timeout(60)
     
     all_jobs_data = []
     CSV_FILENAME = "test_careerlink_jobs_paged.csv"
-    req_headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
-    }
     
-    # Khởi tạo URL ban đầu
-    target_url = "https://www.careerlink.vn/viec-lam/k/it/cntt-phan-mem/19?order=date&province_codes=HCM%2CDN%2CHN&sort=desc"
-    page = 1
+    target_url = "https://www.careerlink.vn/viec-lam/k/it/cntt-phan-mem/19?page=1&order=date&province_codes=HCM%2CDN%2CHN&sort=desc"
     visited_links = set() 
     
     print("==================================================")
-    print("BẮT ĐẦU CÀO CAREERLINK")
+    print("BẮT ĐẦU CÀO CAREERLINK (1 TRANG - KHÔNG DÙNG API)")
     print("==================================================")
 
-    while True:
-        print(f"\n=> Đang tải Trang {page}...")
+    print(f"\n=> Đang tải Trang Danh Sách...")
+    
+    try:
+        driver.get(target_url)
         
-        try:
-            driver.get(target_url)
-            time.sleep(3) 
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight/2);")
-            time.sleep(1)
-            
-            html = driver.page_source
-            soup = BeautifulSoup(html, 'html.parser')
-            
-            # TÌM CHÍNH XÁC CÁC KHỐI CÔNG VIỆC (Dựa theo ảnh DevTools của bạn)
-            job_items = soup.find_all('li', class_=re.compile(r'job-item'))
-            
-            if not job_items:
-                print(f" -> Trang {page} không có danh sách công việc. KẾT THÚC.")
-                break
+        # RADAR CAPTCHA
+        for _ in range(15):
+            page_source = driver.page_source.lower()
+            if "job-item" in page_source:
+                break 
+            if "cloudflare" in page_source or "robot" in page_source or "xác minh" in page_source:
+                print("   [CẢNH BÁO] Đụng Captcha! Vui lòng click 'Tôi không phải robot' trên cửa sổ Chrome!")
+                time.sleep(2)
+            else:
+                time.sleep(2)
                 
-            print(f" -> Tìm thấy {len(job_items)} thẻ bài. Bắt đầu xử lý...")
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight/2);")
+        time.sleep(2)
+        
+        html = driver.page_source
+        soup = BeautifulSoup(html, 'html.parser')
+        job_items = soup.find_all('li', class_=re.compile(r'job-item'))
+        
+        if not job_items:
+            print(" -> Không tải được danh sách việc làm. KẾT THÚC.")
+        else:
+            print(f" -> Tìm thấy {len(job_items)} công việc. Bắt đầu mô phỏng người dùng...\n")
 
             for item in job_items:
                 try:
-                    # 1. BÓC TIÊU ĐỀ VÀ LINK TỪ TRANG DANH SÁCH (100% CHÍNH XÁC)
                     a_link = item.find('a', class_=re.compile(r'job-link'))
                     if not a_link: continue
                     
@@ -97,38 +97,48 @@ def crawl_careerlink():
                     if link in visited_links: continue
                     visited_links.add(link)
 
-                    # 2. BÓC TÊN CÔNG TY TỪ TRANG DANH SÁCH (Dựa theo thẻ job-company)
                     company_tag = item.find('a', class_=re.compile(r'job-company'))
                     company = company_tag.get('title', '').strip() if company_tag else "Không ghi rõ"
                     if not company and company_tag: company = company_tag.text.strip()
 
-                    # 3. KÉO API LẤY THÊM LƯƠNG, KINH NGHIỆM TỪ TRANG CHI TIẾT
+                    # ==================================================
+                    # MỞ TAB MỚI ĐỂ VÀO TRANG CHI TIẾT (An toàn tuyệt đối)
+                    # ==================================================
+                    driver.execute_script("window.open('');")
+                    driver.switch_to.window(driver.window_handles[1])
+                    
                     salary = "Thoả thuận"
                     city = "Không ghi rõ"
                     experience = "Không ghi rõ"
+                    detail_text = ""
                     
-                    res = requests.get(link, headers=req_headers, timeout=5)
-                    if res.status_code == 200:
-                        detail_soup = BeautifulSoup(res.text, 'html.parser')
+                    try:
+                        driver.get(link)
+                        time.sleep(2) # Chờ trang load xong
+                        
+                        detail_soup = BeautifulSoup(driver.page_source, 'html.parser')
                         detail_text = detail_soup.get_text(separator=' | ', strip=True)
 
-                        # Lương
                         salary_match = re.search(r'([\d,\.]+\s*-\s*[\d,\.]+\s*(Triệu|Tr|VND|USD)|Lên đến\s*[\d,\.]+\s*(Triệu|Tr)|Thương lượng|Cạnh tranh|Thoả thuận)', detail_text, re.IGNORECASE)
                         if salary_match: salary = salary_match.group(0).strip()
 
-                        # Thành phố
                         if "Hà Nội" in detail_text or "Ha Noi" in detail_text: city = "Hà Nội"
                         elif "Hồ Chí Minh" in detail_text or "HCM" in detail_text: city = "Hồ Chí Minh"
                         elif "Đà Nẵng" in detail_text or "Da Nang" in detail_text: city = "Đà Nẵng"
 
-                        # Kinh nghiệm
                         exp_match = re.search(r'(\d+\s*-\s*\d+\s*năm(?:\s*kinh nghiệm)?)|(\d+\s*năm(?:\s*kinh nghiệm)?)|(Dưới\s*\d+\s*năm(?:\s*kinh nghiệm)?)|(Không yêu cầu(?:\s*kinh nghiệm)?)', detail_text, re.IGNORECASE)
                         if exp_match: experience = exp_match.group(0).strip()
 
-                    level = extract_level(title + " " + detail_text if res.status_code == 200 else title)
-                    language = extract_language(title + " " + detail_text if res.status_code == 200 else title)
+                    except Exception as e:
+                        pass
+                    finally:
+                        driver.close() # Đóng tab
+                        driver.switch_to.window(driver.window_handles[0]) # Trở về trang gốc
+                    # ==================================================
 
-                    # Gom vào Data
+                    level = extract_level(title + " " + detail_text)
+                    language = extract_language(title + " " + detail_text)
+
                     all_jobs_data.append({
                         "Tiêu đề": title,
                         "Công ty": company,
@@ -139,38 +149,26 @@ def crawl_careerlink():
                         "Ngôn ngữ": language,
                         "Link": link
                     })
-                    print(f"   + {title[:30]} | {company[:20]} | {experience}")
                     
-                    time.sleep(0.5) # Nghỉ xả hơi nhẹ
+                    print(f" + {title[:75]:<75} | {company[:50]:<50} | {experience}")
 
                 except Exception as e:
                     continue
 
-            # TÌM NÚT TRANG TIẾP THEO (CHUẨN XÁC)
-            next_page_btn = soup.find('a', rel='next')
-            if next_page_btn and next_page_btn.get('href'):
-                target_url = "https://www.careerlink.vn" + next_page_btn['href']
-                print(f" -> Chuẩn bị lật sang trang {page + 1}")
-                page += 1
-            else:
-                print(f" -> Không tìm thấy nút Next. KẾT THÚC CÀO TOÀN BỘ.")
-                break
-                
-            # Lưu file 
-            df = pd.DataFrame(all_jobs_data)
-            df.to_csv(CSV_FILENAME, index=False, encoding='utf-8-sig')
+        df = pd.DataFrame(all_jobs_data)
+        df.to_csv(CSV_FILENAME, index=False, encoding='utf-8-sig')
 
-        except Exception as e:
-            print(f"Lỗi bất ngờ ở trang {page}: {e}. Dừng cào.")
-            break 
+    except Exception as e:
+        print(f"Lỗi hệ thống: {e}. Dừng cào.")
 
-    try:
-        driver.quit()
-    except:
-        pass
+    finally:
+        try:
+            driver.quit()
+        except:
+            pass
         
     print("\n==================================================")
-    print(f"TỔNG KẾT: Đã cào được {len(all_jobs_data)} bài chuẩn xác 100%.")
+    print(f"TỔNG KẾT: Đã cào được {len(all_jobs_data)} bài chuẩn xác từ CareerLink.")
     print("==================================================")
 
 if __name__ == "__main__":
