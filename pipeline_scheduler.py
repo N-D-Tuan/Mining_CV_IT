@@ -45,14 +45,14 @@ def job_pipeline():
 
 if __name__ == "__main__":
     print("=== HỆ THỐNG TỰ ĐỘNG CẬP NHẬT VIỆC LÀM ĐÃ KHỞI ĐỘNG ===")
-    print("-> Tần suất: 3 phút / lần")
+    print("-> Tần suất: 5 phút / lần")
     print("-> Nhấn Ctrl + C để dừng hệ thống.\n")
 
     # Chạy ngay lập tức lần đầu tiên
     job_pipeline()
 
-    # Vòng lặp vô hạn, cứ ngủ 3 phút (180 giây) rồi dậy làm việc
-    CYCLE_MINUTES = 3
+    # Vòng lặp vô hạn, cứ ngủ 5 phút (300 giây) rồi dậy làm việc
+    CYCLE_MINUTES = 5
     
     while True:
         # Đếm ngược cho sinh động (Tùy chọn)
