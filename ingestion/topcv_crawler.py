@@ -49,7 +49,7 @@ def extract_city(location_text):
     else:
         return 'Khác'
 
-def crawl_test_5_pages():
+def crawl_test_10_pages():
     print("1. Đang khởi động trình duyệt ảo (Chrome)...")
     options = Options()
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
@@ -57,12 +57,12 @@ def crawl_test_5_pages():
     
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
     
-    base_url = "https://www.topcv.vn/tim-viec-lam-software-engineering-tai-ha-noi-l1cr257cb258?type_keyword=0&sba=1&category_family=r257~b258&locations=l1_l2_l8&saturday_status=0"
+    base_url = "https://www.topcv.vn/tim-viec-lam-software-engineering-tai-ha-noi-l1cr257cb258?sort=up_top&type_keyword=0&category_family=r257%7Eb258&locations=l1_l2_l8&saturday_status=0&sba=1"
     
     all_jobs_data = []
     page = 1
     previous_first_link = None 
-    MAX_TEST_PAGES = 5 
+    MAX_TEST_PAGES = 10 
     
     print("==================================================")
     print(f"CHẾ ĐỘ TEST: CHỈ CÀO TỐI ĐA {MAX_TEST_PAGES} TRANG")
@@ -170,4 +170,4 @@ def crawl_test_5_pages():
         print("\nKhông thu thập được dữ liệu nào.")
 
 if __name__ == "__main__":
-    crawl_test_5_pages()
+    crawl_test_10_pages()
