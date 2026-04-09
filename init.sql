@@ -21,8 +21,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     -- Lưu chuỗi gốc cào được (vd: "15 - 20 triệu") để hiển thị cho UI
     raw_salary VARCHAR(100), 
     -- Dữ liệu đã chuẩn hóa (số nguyên) để làm Filter và làm Matching
-    min_salary INTEGER,      
-    max_salary INTEGER,      
+    min_salary BIGINT,      
+    max_salary BIGINT,      
     city VARCHAR(100),
     experience VARCHAR(100),
     job_level VARCHAR(100), 
