@@ -5,7 +5,6 @@ import re
 import os
 from dotenv import load_dotenv
 
-# Load biến môi trường từ file .env (Nhớ cấu hình DB_NAME, DB_USER, DB_PASS...)
 load_dotenv()
 
 DB_HOST = os.getenv("DB_HOST", "localhost")
@@ -16,39 +15,71 @@ DB_PORT = os.getenv("DB_PORT", "5432")
 
 def parse_salary(salary_str):
     """
-    Hàm 'rửa' dữ liệu lương: Biến chuỗi text thành min_salary và max_salary (VNĐ)
+    Hàm 'rửa' dữ liệu lương: Tự động nhận diện VND/USD, loại bỏ ký tự thừa và quy đổi ra VND
     """
     if not isinstance(salary_str, str):
         return None, None
     
     salary_str = salary_str.lower().strip()
     
-    # Nếu là thoả thuận hoặc chưa đăng nhập
-    if "thoả thuận" in salary_str or "đăng nhập" in salary_str:
+    # Bỏ qua các trường hợp không có số
+    if "thoả thuận" in salary_str or "thỏa thuận" in salary_str or "đăng nhập" in salary_str or "thương lượng" in salary_str or "cạnh tranh" in salary_str:
         return None, None
 
     min_sal, max_sal = None, None
     
-    # Bắt trường hợp: 15 - 20 triệu
-    match_range = re.search(r'(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*triệu', salary_str)
-    if match_range:
-        min_sal = int(float(match_range.group(1)) * 1000000)
-        max_sal = int(float(match_range.group(2)) * 1000000)
-        return min_sal, max_sal
+    # ==========================================
+    # 1. XỬ LÝ USD (Quy đổi 1 USD = 25,000 VND)
+    # ==========================================
+    if 'usd' in salary_str or '$' in salary_str:
+        USD_TO_VND = 25000
         
-    # Bắt trường hợp: Tới 30 triệu / Lên đến 30 triệu
-    match_up_to = re.search(r'(tới|lên đến|up to)\s*(\d+(?:\.\d+)?)\s*triệu', salary_str)
-    if match_up_to:
-        max_sal = int(float(match_up_to.group(2)) * 1000000)
-        return None, max_sal
-        
-    # Bắt trường hợp: Từ 15 triệu
-    match_from = re.search(r'(từ|from)\s*(\d+(?:\.\d+)?)\s*triệu', salary_str)
-    if match_from:
-        min_sal = int(float(match_from.group(2)) * 1000000)
-        return min_sal, None
+        # Hàm nội bộ để xóa dấu phẩy/chấm (VD: 2,500 -> 2500, 2.000 -> 2000)
+        def clean_usd(val):
+            return int(re.sub(r'[,\.]', '', val))
+            
+        # Range: "600 - 2,500 USD" hoặc "$600 - $2500"
+        match_usd_range = re.search(r'([\d,\.]+)\s*(?:usd|\$)?\s*-\s*([\d,\.]+)\s*(?:usd|\$)', salary_str)
+        if match_usd_range:
+            min_sal = clean_usd(match_usd_range.group(1)) * USD_TO_VND
+            max_sal = clean_usd(match_usd_range.group(2)) * USD_TO_VND
+            return min_sal, max_sal
+            
+        # Up to: "Up to 2.000 USD" hoặc "Lên đến 2000$"
+        match_usd_upto = re.search(r'(?:tới|lên đến|up to)\s*([\d,\.]+)\s*(?:usd|\$)', salary_str)
+        if match_usd_upto:
+            max_sal = clean_usd(match_usd_upto.group(1)) * USD_TO_VND
+            return None, max_sal
+            
+        # From: "Từ 500 USD"
+        match_usd_from = re.search(r'(?:từ|from)\s*([\d,\.]+)\s*(?:usd|\$)', salary_str)
+        if match_usd_from:
+            min_sal = clean_usd(match_usd_from.group(1)) * USD_TO_VND
+            return min_sal, None
 
-    # (Bạn có thể thêm logic cho USD nếu cần, ở đây tạm focus vào VNĐ)
+    # ==========================================
+    # 2. XỬ LÝ VND (Bao gồm "triệu" và "tr")
+    # ==========================================
+    else:
+        # Range: "15 - 22tr", "15tr - 20tr", "15 - 20 triệu"
+        match_range = re.search(r'(\d+(?:\.\d+)?)\s*(?:triệu|tr\b)?\s*-\s*(\d+(?:\.\d+)?)\s*(?:triệu|tr\b)', salary_str)
+        if match_range:
+            min_sal = int(float(match_range.group(1)) * 1000000)
+            max_sal = int(float(match_range.group(2)) * 1000000)
+            return min_sal, max_sal
+            
+        # Up to: "Lên đến 30tr", "Up to 30 triệu"
+        match_up_to = re.search(r'(?:tới|lên đến|up to)\s*(\d+(?:\.\d+)?)\s*(?:triệu|tr\b)', salary_str)
+        if match_up_to:
+            max_sal = int(float(match_up_to.group(1)) * 1000000)
+            return None, max_sal
+            
+        # From: "Từ 15tr"
+        match_from = re.search(r'(?:từ|from)\s*(\d+(?:\.\d+)?)\s*(?:triệu|tr\b)', salary_str)
+        if match_from:
+            min_sal = int(float(match_from.group(1)) * 1000000)
+            return min_sal, None
+
     return min_sal, max_sal
 
 def parse_tech_stack(tech_str):
@@ -58,42 +89,53 @@ def parse_tech_stack(tech_str):
     if not isinstance(tech_str, str) or tech_str == "Không ghi rõ" or tech_str.strip() == "":
         return []
     
-    # Cắt theo dấu phẩy, xóa khoảng trắng thừa và viết hoa chữ cái đầu cho đồng bộ
     skills = [skill.strip().title() for skill in tech_str.split(',')]
-    # Loại bỏ các skill rỗng hoặc trùng lặp
     return list(set(filter(None, skills)))
 
 def process_and_load_data(csv_file_path, source_name):
-    print(f"\n--- BẮT ĐẦU XỬ LÝ DỮ LIỆU TỪ {source_name} ---")
+    print(f"\n--- BẮT ĐẦU XỬ LÝ DỮ LIỆU TỪ {source_name.upper()} ---")
     
     try:
-        # 1. ĐỌC DỮ LIỆU BẰNG PANDAS
         df = pd.read_csv(csv_file_path)
         print(f"-> Đã đọc {len(df)} dòng từ {csv_file_path}")
+
+        # CLEANING: Chuẩn hóa dữ liệu thô trước khi transform
+        for col in df.columns:
+            if df[col].dtype == object: # Nếu là cột chứa chuỗi (text)
+                # 1. Thay thế \n, \r, \t bằng dấu khoảng trắng
+                df[col] = df[col].astype(str).str.replace(r'[\n\r\t]+', ' ', regex=True)
+                # 2. Xóa các khoảng trắng kép (ví dụ: "Java    Dev" -> "Java Dev")
+                df[col] = df[col].str.replace(r'\s{2,}', ' ', regex=True)
+                # 3. Cắt tỉa 2 đầu
+                df[col] = df[col].str.strip()
+                # 4. Trả các chữ 'nan' sinh ra do pandas về dạng None của Python
+                df[col] = df[col].replace('nan', None)
         
-        # 2. TRANSFORM (XỬ LÝ DỮ LIỆU)
-        # Tạo thêm 2 cột min_salary và max_salary từ hàm parse_salary
+        # TRANSFORM
         df[['min_salary', 'max_salary']] = df['Mức lương'].apply(lambda x: pd.Series(parse_salary(x)))
-        
-        # Đổi chuỗi Ngôn ngữ thành List
         df['tech_stack_array'] = df['Ngôn ngữ'].apply(parse_tech_stack)
         
-        # 3. LOAD (ĐẨY VÀO DATABASE POSTGRESQL)
+        # LOAD
         conn = psycopg2.connect(host=DB_HOST, database=DB_NAME, user=DB_USER, password=DB_PASS, port=DB_PORT)
         cursor = conn.cursor()
         
-        # Câu lệnh Insert (ON CONFLICT DO NOTHING giúp bỏ qua bài trùng lặp link)
+        # TÍNH NĂNG CHỐNG TRÙNG LẶP (DEDUPLICATION):
+        # 1. 'ON CONFLICT (link)' -> Ngăn thêm trùng bài cùng 1 nền tảng.
+        # 2. 'WHERE NOT EXISTS' -> Ngăn bài đã tồn tại ở nền tảng khác (Dựa vào Tiêu đề + Công ty).
         insert_query = """
             INSERT INTO jobs (
                 title, company, raw_salary, min_salary, max_salary, 
                 city, experience, job_level, tech_stack, link, source, trust_score
-            ) VALUES (
-                %s, %s, %s, %s, %s, 
-                %s, %s, %s, %s, %s, %s, 100
-            ) ON CONFLICT (link) DO NOTHING;
+            ) 
+            SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 100
+            WHERE NOT EXISTS (
+                SELECT 1 FROM jobs 
+                WHERE LOWER(title) = LOWER(%s) 
+                AND LOWER(company) = LOWER(%s)
+            )
+            ON CONFLICT (link) DO NOTHING;
         """
         
-        # Chuẩn bị dữ liệu để chèn hàng loạt (Bulk Insert)
         data_to_insert = []
         for index, row in df.iterrows():
             data_to_insert.append((
@@ -105,37 +147,48 @@ def process_and_load_data(csv_file_path, source_name):
                 row['Thành phố'], 
                 row['Kinh nghiệm'], 
                 row['Trình độ'], 
-                row['tech_stack_array'], # Truyền list Python, psycopg2 sẽ tự map sang TEXT[] của Postgres
+                row['tech_stack_array'], 
                 row['Link'], 
-                source_name
+                source_name,
+                
+                # Hai tham số này cung cấp cho khối WHERE NOT EXISTS (Tiêu đề và Công ty)
+                row['Tiêu đề'], 
+                row['Công ty']
             ))
             
-        # Thực thi Bulk Insert cho nhanh
+        # Thực thi Bulk Insert
         execute_batch(cursor, insert_query, data_to_insert)
         conn.commit()
         
-        # Kiểm tra xem có bao nhiêu dòng thực sự được insert (bỏ qua dòng trùng)
-        print(f"-> Đã Load dữ liệu vào Database thành công!")
+        print(f"-> Đã Nạp (Load) dữ liệu vào Database thành công!")
         
+    except FileNotFoundError:
+        print(f"[!] Lỗi: Không tìm thấy file {csv_file_path}")
+    except psycopg2.Error as db_err:
+        print(f"[!] Lỗi Database: {db_err}")
     except Exception as e:
-        print(f"LỖI: {e}")
+        print(f"[!] LỖI KHÔNG XÁC ĐỊNH: {e}")
     finally:
         if 'conn' in locals() and conn:
             cursor.close()
             conn.close()
 
 if __name__ == "__main__":
-    # Đường dẫn (Tùy thuộc vào việc bạn đặt file ở đâu so với thư mục ingestion)
-    # Ví dụ: file data_processor.py nằm trong thư mục processor
-    topcv_csv = "../ingestion/test_topcv_jobs_paged.csv" # Đổi lại tên file cho đúng
-    itviec_csv = "../ingestion/test_itviec_jobs_paged.csv"  # Đổi lại tên file cho đúng
+    target_files = [
+        ("../ingestion/test_topcv_jobs_paged.csv", "TopCV"),
+        ("../ingestion/test_vnworks_jobs_paged.csv", "VietnamWorks"),
+        ("../ingestion/test_topdev_jobs_paged.csv", "TopDev"),
+        ("../ingestion/test_careerlink_jobs_paged.csv", "CareerLink")
+    ]
     
-    if os.path.exists(topcv_csv):
-        process_and_load_data(topcv_csv, "TopCV")
-    else:
-        print(f"Không tìm thấy file: {topcv_csv}")
-        
-    if os.path.exists(itviec_csv):
-        process_and_load_data(itviec_csv, "ITviec")
-    else:
-        print(f"Không tìm thấy file: {itviec_csv}")
+    print("=====================================================")
+    print(" KHỞI ĐỘNG DATA PROCESSOR: CHUẨN HÓA VÀ NẠP DATABASE ")
+    print("=====================================================")
+    
+    for file_path, source in target_files:
+        if os.path.exists(file_path):
+            process_and_load_data(file_path, source)
+        else:
+            print(f"\n[!] Bỏ qua {source}: Không tìm thấy file tại '{file_path}'")
+            
+    print("\n=> HOÀN TẤT TOÀN BỘ QUÁ TRÌNH NẠP DỮ LIỆU!")
