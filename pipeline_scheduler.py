@@ -2,6 +2,7 @@ import time
 import subprocess
 import sys
 import os
+import concurrent.futures
 from datetime import datetime
 
 # Đảm bảo script chạy đúng từ thư mục gốc
@@ -29,11 +30,30 @@ def job_pipeline():
     print(f"{'='*60}")
 
     # BƯỚC 1: Thu thập dữ liệu (Ingestion)
-    print("\n--- PHASE 1.1: Đang cào dữ liệu từ TopCV ---")
-    run_script("topcv_crawler.py", cwd=os.path.join(ROOT_DIR, "ingestion"))
+    print("\n--- PHASE 1: Đang cào dữ liệu ĐỒNG THỜI từ 4 nền tảng ---")
+    ingestion_dir = os.path.join(ROOT_DIR, "ingestion")
+    
+    # Danh sách 4 công nhân cào dữ liệu
+    crawlers = [
+        "topcv_crawler.py", 
+        "vnworks_crawler.py", 
+        "topdev_crawler.py", 
+        "careerlink_crawler.py"
+    ]
 
-    print("\n--- PHASE 1.2: Đang cào dữ liệu từ ITviec ---")
-    run_script("itviec_crawler.py", cwd=os.path.join(ROOT_DIR, "ingestion"))
+    # Mở 4 luồng (threads) để chạy 4 script cùng 1 thời điểm
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        futures = []
+        for crawler in crawlers:
+            # Giao việc cho luồng hiện tại
+            futures.append(executor.submit(run_script, crawler, ingestion_dir))
+            
+            # [QUAN TRỌNG] Nghỉ 3 giây trước khi gọi luồng tiếp theo.
+            # Tránh xung đột WinError 32 khi 4 file cùng giành giật chromedriver.exe
+            time.sleep(3) 
+            
+        # Đứng chờ cả 4 file chạy xong hoàn toàn
+        concurrent.futures.wait(futures)
 
     # BƯỚC 2: Xử lý và Tải lên Database (Processor)
     print("\n--- PHASE 2: Đang xử lý và lưu vào PostgreSQL ---")
