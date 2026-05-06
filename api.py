@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 
 load_dotenv()
 
@@ -25,7 +25,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60")
 app = FastAPI(title="Mining CV API", version="0.2.0")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["pbkdf2_sha256", "bcrypt"], default="pbkdf2_sha256", deprecated="auto")
 
 
 def get_db_connection():
@@ -51,6 +51,14 @@ class TokenData(BaseModel):
 class UserCreate(BaseModel):
     email: str
     password: str
+
+    @validator("password")
+    def password_length(cls, value: str):
+        if len(value) < 8:
+            raise ValueError("Mật khẩu phải có ít nhất 8 ký tự")
+        if len(value) > 150:
+            raise ValueError("Mật khẩu không được dài hơn 150 ký tự")
+        return value
 
 
 class UserOut(BaseModel):
