@@ -2,14 +2,17 @@ import os
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-import psycopg2
-from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, validator
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, create_engine, desc, func
+from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import Session, sessionmaker
 
 load_dotenv()
 
@@ -22,21 +25,68 @@ JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "supersecretkey")
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 
+DATABASE_URL = f"postgresql+psycopg2://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
+engine = create_engine(DATABASE_URL, echo=False)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+Base = declarative_base()
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class UserProfile(Base):
+    __tablename__ = "user_profiles"
+
+    user_id = Column(Integer, primary_key=True)
+    expected_salary = Column(Integer)
+    target_city = Column(String(100))
+    current_level = Column(String(100))
+    skills = Column(PG_ARRAY(String))
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class Job(Base):
+    __tablename__ = "jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(255), nullable=False)
+    company = Column(String(255))
+    raw_salary = Column(String(100))
+    min_salary = Column(Integer)
+    max_salary = Column(Integer)
+    city = Column(String(100))
+    experience = Column(String(100))
+    job_level = Column(String(100))
+    tech_stack = Column(PG_ARRAY(String))
+    link = Column(Text, unique=True, nullable=False)
+    source = Column(String(50))
+    trust_score = Column(Integer, default=100)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+Base.metadata.create_all(bind=engine)
+
 app = FastAPI(title="Mining CV API", version="0.2.0")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 pwd_context = CryptContext(schemes=["pbkdf2_sha256", "bcrypt"], default="pbkdf2_sha256", deprecated="auto")
-
-
-def get_db_connection():
-    return psycopg2.connect(
-        host=DB_HOST,
-        database=DB_NAME,
-        user=DB_USER,
-        password=DB_PASS,
-        port=DB_PORT,
-        cursor_factory=RealDictCursor,
-    )
 
 
 class Token(BaseModel):
@@ -66,17 +116,23 @@ class UserOut(BaseModel):
     email: str
     created_at: datetime
 
+    class Config:
+        orm_mode = True
+
 
 class ProfileIn(BaseModel):
     expected_salary: Optional[int] = None
     target_city: Optional[str] = None
     current_level: Optional[str] = None
-    skills: Optional[List[str]] = []
+    skills: Optional[List[str]] = None
 
 
 class ProfileOut(ProfileIn):
     user_id: int
     updated_at: datetime
+
+    class Config:
+        orm_mode = True
 
 
 class JobOut(BaseModel):
@@ -97,6 +153,9 @@ class JobOut(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    class Config:
+        orm_mode = True
+
 
 class JobMatchOut(JobOut):
     match_rate: int
@@ -109,6 +168,14 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     source: str = "local-ai-stub"
+
+
+class JobFilterResponse(BaseModel):
+    cities: List[str]
+    sources: List[str]
+    job_levels: List[str]
+    experiences: List[str]
+    techs: List[str]
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -126,34 +193,22 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
-def get_user_by_email(email: str):
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT id, email, password_hash, created_at FROM users WHERE email = %s", (email,))
-                return cursor.fetchone()
-    except Exception:
-        return None
+def get_user_by_email(db: Session, email: str):
+    return db.query(User).filter(User.email == email).first()
 
 
-def get_user_by_id(user_id: int):
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT id, email, created_at FROM users WHERE id = %s", (user_id,))
-                return cursor.fetchone()
-    except Exception:
-        return None
+def get_user_by_id(db: Session, user_id: int):
+    return db.query(User).filter(User.id == user_id).first()
 
 
-def authenticate_user(email: str, password: str):
-    user = get_user_by_email(email)
-    if not user or not verify_password(password, user["password_hash"]):
+def authenticate_user(db: Session, email: str, password: str):
+    user = get_user_by_email(db, email)
+    if not user or not verify_password(password, user.password_hash):
         return None
     return user
 
 
-def get_current_user(token: str = Depends(oauth2_scheme)):
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -167,32 +222,23 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
         token_data = TokenData(sub=email)
     except JWTError:
         raise credentials_exception
-    user = get_user_by_email(token_data.sub)
+    user = get_user_by_email(db, token_data.sub)
     if user is None:
         raise credentials_exception
     return user
 
 
-def get_current_user_optional(token: Optional[str] = Depends(oauth2_scheme)):
+def get_current_user_optional(token: Optional[str] = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     if not token:
         return None
     try:
-        return get_current_user(token)
+        return get_current_user(token, db)
     except HTTPException:
         return None
 
 
-def get_user_profile(user_id: int):
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "SELECT user_id, expected_salary, target_city, current_level, skills, updated_at FROM user_profiles WHERE user_id = %s",
-                    (user_id,),
-                )
-                return cursor.fetchone()
-    except Exception:
-        return None
+def get_user_profile(db: Session, user_id: int):
+    return db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
 
 
 def calculate_match_rate(job: dict, profile: dict) -> int:
@@ -233,7 +279,6 @@ def calculate_match_rate(job: dict, profile: dict) -> int:
         city_score = 10
 
     trust_bonus = min(max((job.get("trust_score") or 0) / 100 * 5, 0), 5)
-
     total = int(round(skill_score + level_score + salary_score + city_score + trust_bonus))
     return min(total, 100)
 
@@ -267,179 +312,189 @@ def health_check():
 
 
 @app.post("/auth/register", response_model=UserOut)
-def register_user(user: UserCreate):
-    existing = get_user_by_email(user.email)
+def register_user(user: UserCreate, db: Session = Depends(get_db)):
+    existing = get_user_by_email(db, user.email)
     if existing:
         raise HTTPException(status_code=400, detail="Email đã tồn tại")
-
     hashed_password = get_password_hash(user.password)
     try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "INSERT INTO users (email, password_hash) VALUES (%s, %s) RETURNING id, email, created_at",
-                    (user.email, hashed_password),
-                )
-                conn.commit()
-                row = cursor.fetchone()
-                return row
-    except Exception as exc:
+        db_user = User(email=user.email, password_hash=hashed_password)
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+        return db_user
+    except SQLAlchemyError as exc:
+        db.rollback()
         raise HTTPException(status_code=500, detail=str(exc))
 
 
 @app.post("/auth/token", response_model=Token)
-def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = authenticate_user(form_data.username, form_data.password)
+def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Sai email hoặc mật khẩu",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    access_token = create_access_token(data={"sub": user["email"]})
+    access_token = create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer"}
 
 
 @app.get("/users/me", response_model=UserOut)
-def read_users_me(current_user: dict = Depends(get_current_user)):
-    return {"id": current_user["id"], "email": current_user["email"], "created_at": current_user["created_at"]}
+def read_users_me(current_user: User = Depends(get_current_user)):
+    return current_user
 
 
 @app.get("/profiles/me", response_model=ProfileOut)
-def read_profile(current_user: dict = Depends(get_current_user)):
-    profile = get_user_profile(current_user["id"])
+def read_profile(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    profile = get_user_profile(db, current_user.id)
     if not profile:
-        return {"user_id": current_user["id"], "expected_salary": None, "target_city": None, "current_level": None, "skills": [], "updated_at": datetime.utcnow()}
+        return ProfileOut(user_id=current_user.id, expected_salary=None, target_city=None, current_level=None, skills=[], updated_at=datetime.utcnow())
     return profile
 
 
 @app.put("/profiles/me", response_model=ProfileOut)
-def update_profile(profile_in: ProfileIn, current_user: dict = Depends(get_current_user)):
+def update_profile(profile_in: ProfileIn, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    profile = get_user_profile(db, current_user.id)
     try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "INSERT INTO user_profiles (user_id, expected_salary, target_city, current_level, skills, updated_at) VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP) "
-                    "ON CONFLICT (user_id) DO UPDATE SET expected_salary = EXCLUDED.expected_salary, target_city = EXCLUDED.target_city, current_level = EXCLUDED.current_level, skills = EXCLUDED.skills, updated_at = CURRENT_TIMESTAMP RETURNING user_id, expected_salary, target_city, current_level, skills, updated_at",
-                    (current_user["id"], profile_in.expected_salary, profile_in.target_city, profile_in.current_level, profile_in.skills),
-                )
-                conn.commit()
-                return cursor.fetchone()
-    except Exception as exc:
+        if profile:
+            profile.expected_salary = profile_in.expected_salary
+            profile.target_city = profile_in.target_city
+            profile.current_level = profile_in.current_level
+            profile.skills = profile_in.skills or []
+            profile.updated_at = datetime.utcnow()
+        else:
+            profile = UserProfile(
+                user_id=current_user.id,
+                expected_salary=profile_in.expected_salary,
+                target_city=profile_in.target_city,
+                current_level=profile_in.current_level,
+                skills=profile_in.skills or [],
+            )
+            db.add(profile)
+        db.commit()
+        db.refresh(profile)
+        return profile
+    except SQLAlchemyError as exc:
+        db.rollback()
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@app.get("/jobs/filters")
-def get_filters():
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT DISTINCT city FROM jobs WHERE city IS NOT NULL ORDER BY city")
-                cities = [row["city"] for row in cursor.fetchall() if row["city"]]
+@app.get("/jobs", response_model=List[JobOut])
+def list_jobs(
+    city: Optional[str] = Query(None, description="Lọc theo thành phố"),
+    source: Optional[str] = Query(None, description="Nguồn dữ liệu"),
+    job_level: Optional[str] = Query(None, description="Trình độ"),
+    experience: Optional[str] = Query(None, description="Kinh nghiệm"),
+    tech: Optional[str] = Query(None, description="Kỹ năng / công nghệ"),
+    keyword: Optional[str] = Query(None, description="Tìm kiếm title hoặc company"),
+    min_salary: Optional[int] = Query(None, description="Lọc lương tối thiểu (VND)"),
+    max_salary: Optional[int] = Query(None, description="Lọc lương tối đa (VND)"),
+    limit: int = Query(50, ge=1, le=200, description="Số bản ghi trả về"),
+    offset: int = Query(0, ge=0, description="Offset"),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Job).filter(Job.is_active == True)
+    if city:
+        query = query.filter(func.lower(Job.city) == city.lower())
+    if source:
+        query = query.filter(func.lower(Job.source) == source.lower())
+    if job_level:
+        query = query.filter(func.lower(Job.job_level) == job_level.lower())
+    if experience:
+        query = query.filter(func.lower(Job.experience) == experience.lower())
+    if tech:
+        query = query.filter(Job.tech_stack.any(tech))
+    if keyword:
+        keyword_pattern = f"%{keyword}%"
+        query = query.filter(func.lower(Job.title).like(keyword_pattern.lower()) | func.lower(Job.company).like(keyword_pattern.lower()))
+    if min_salary is not None:
+        query = query.filter(func.coalesce(Job.max_salary, Job.min_salary, 0) >= min_salary)
+    if max_salary is not None:
+        query = query.filter(func.coalesce(Job.min_salary, Job.max_salary, 0) <= max_salary)
+    jobs = query.order_by(desc(Job.created_at)).limit(limit).offset(offset).all()
+    return jobs
 
-                cursor.execute("SELECT DISTINCT source FROM jobs WHERE source IS NOT NULL ORDER BY source")
-                sources = [row["source"] for row in cursor.fetchall() if row["source"]]
 
-                cursor.execute("SELECT DISTINCT job_level FROM jobs WHERE job_level IS NOT NULL ORDER BY job_level")
-                levels = [row["job_level"] for row in cursor.fetchall() if row["job_level"]]
+@app.get("/jobs/{job_id}", response_model=JobOut)
+def get_job(job_id: int, db: Session = Depends(get_db)):
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
 
-                cursor.execute("SELECT DISTINCT experience FROM jobs WHERE experience IS NOT NULL ORDER BY experience")
-                experiences = [row["experience"] for row in cursor.fetchall() if row["experience"]]
 
-                cursor.execute("SELECT DISTINCT LOWER(unnest(tech_stack)) AS tech FROM jobs WHERE tech_stack IS NOT NULL ORDER BY tech")
-                techs = [row["tech"] for row in cursor.fetchall() if row["tech"]]
-
-                return {
-                    "cities": cities,
-                    "sources": sources,
-                    "job_levels": levels,
-                    "experiences": experiences,
-                    "techs": techs,
-                }
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+@app.get("/jobs/filters", response_model=JobFilterResponse)
+def get_filters(db: Session = Depends(get_db)):
+    cities = [row[0] for row in db.query(Job.city).filter(Job.city.isnot(None)).distinct().order_by(Job.city).all() if row[0]]
+    sources = [row[0] for row in db.query(Job.source).filter(Job.source.isnot(None)).distinct().order_by(Job.source).all() if row[0]]
+    levels = [row[0] for row in db.query(Job.job_level).filter(Job.job_level.isnot(None)).distinct().order_by(Job.job_level).all() if row[0]]
+    experiences = [row[0] for row in db.query(Job.experience).filter(Job.experience.isnot(None)).distinct().order_by(Job.experience).all() if row[0]]
+    tech_expr = func.lower(func.unnest(Job.tech_stack)).label("tech")
+    techs = [row.tech for row in db.query(tech_expr).filter(Job.tech_stack.isnot(None)).distinct().order_by(tech_expr).all() if row.tech]
+    return {
+        "cities": cities,
+        "sources": sources,
+        "job_levels": levels,
+        "experiences": experiences,
+        "techs": techs,
+    }
 
 
 @app.get("/jobs/recommendations", response_model=List[JobMatchOut])
 def recommendations(
     limit: int = Query(20, ge=1, le=50),
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    profile = get_user_profile(current_user["id"])
+    profile = get_user_profile(db, current_user.id)
     if not profile:
         raise HTTPException(status_code=400, detail="Vui lòng cập nhật profile trước")
-
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT * FROM jobs WHERE is_active = TRUE ORDER BY created_at DESC LIMIT 200")
-                jobs = cursor.fetchall()
-                scored = []
-                for job in jobs:
-                    match_rate = calculate_match_rate(job, profile)
-                    job_data = dict(job)
-                    job_data["match_rate"] = match_rate
-                    scored.append(job_data)
-                scored.sort(key=lambda x: x["match_rate"], reverse=True)
-                return scored[:limit]
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    jobs = db.query(Job).filter(Job.is_active == True).order_by(desc(Job.created_at)).limit(200).all()
+    scored = []
+    for job in jobs:
+        job_data = {k: v for k, v in job.__dict__.items() if k != "_sa_instance_state"}
+        match_rate = calculate_match_rate(job_data, profile.__dict__)
+        job_data["match_rate"] = match_rate
+        scored.append(job_data)
+    scored.sort(key=lambda x: x["match_rate"], reverse=True)
+    return [JobMatchOut(**job) for job in scored[:limit]]
 
 
 @app.get("/jobs/{job_id}/score")
-def score_job(job_id: int, current_user: dict = Depends(get_current_user)):
-    profile = get_user_profile(current_user["id"])
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT * FROM jobs WHERE id = %s", (job_id,))
-                job = cursor.fetchone()
-                if not job:
-                    raise HTTPException(status_code=404, detail="Job not found")
-                trust = compute_trust_score(job)
-                match_rate = calculate_match_rate(job, profile) if profile else 0
-                return {"job_id": job_id, "match_rate": match_rate, "trust_score": trust, "job": job}
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+def score_job(job_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    profile = get_user_profile(db, current_user.id)
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    job_data = {k: v for k, v in job.__dict__.items() if k != "_sa_instance_state"}
+    trust = compute_trust_score(job_data)
+    match_rate = calculate_match_rate(job_data, profile.__dict__) if profile else 0
+    return {"job_id": job_id, "match_rate": match_rate, "trust_score": trust, "job": job_data}
 
 
 @app.get("/stats/tech-trends")
-def tech_trends(months: int = Query(6, ge=1, le=24)):
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "SELECT to_char(created_at, 'YYYY-MM') AS month, LOWER(tech) AS tech, COUNT(*) AS count "
-                    "FROM jobs, unnest(tech_stack) AS tech "
-                    "WHERE created_at >= CURRENT_DATE - (%s || ' months')::interval "
-                    "GROUP BY month, tech "
-                    "ORDER BY month DESC, count DESC",
-                    (months,),
-                )
-                return cursor.fetchall()
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+def tech_trends(months: int = Query(6, ge=1, le=24), db: Session = Depends(get_db)):
+    cutoff = datetime.utcnow() - timedelta(days=months * 30)
+    tech_rows = db.query(
+        func.to_char(Job.created_at, "YYYY-MM").label("month"),
+        func.lower(func.unnest(Job.tech_stack)).label("tech"),
+        func.count().label("count"),
+    ).filter(Job.created_at >= cutoff).group_by("month", "tech").order_by(desc("month"), desc("count")).all()
+    return [{"month": row.month, "tech": row.tech, "count": row.count} for row in tech_rows]
 
 
 @app.post("/chatbot/message", response_model=ChatResponse)
-def chatbot_message(request: ChatRequest, current_user: Optional[dict] = Depends(get_current_user_optional)):
+def chatbot_message(request: ChatRequest, current_user: Optional[User] = Depends(get_current_user_optional), db: Session = Depends(get_db)):
     profile = None
     if current_user:
-        profile = get_user_profile(current_user["id"])
-    answer = stub_ai_advice(request.message, profile)
+        profile = get_user_profile(db, current_user.id)
+    answer = stub_ai_advice(request.message, profile.__dict__ if profile else None)
     return {"answer": answer, "source": "gemini-future-stub"}
 
 
 @app.get("/stats/cities")
-def stats_cities():
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "SELECT city, COUNT(*) AS job_count FROM jobs WHERE is_active = TRUE GROUP BY city ORDER BY job_count DESC LIMIT 50"
-                )
-                return cursor.fetchall()
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+def stats_cities(db: Session = Depends(get_db)):
+    cities = db.query(Job.city, func.count().label("job_count")).filter(Job.is_active == True).group_by(Job.city).order_by(desc("job_count")).limit(50).all()
+    return [{"city": row.city, "job_count": row.job_count} for row in cities]
