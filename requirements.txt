@@ -1,0 +1,8 @@
+selenium
+webdriver-manager
+beautifulsoup4
+pandas
+psycopg2-binary
+python-dotenv
+fastapi
+uvicorn[standard]
