@@ -1,0 +1,6 @@
+selenium
+webdriver-manager
+python-dotenv
+pandas
+google-genai
+psycopg2-binary
