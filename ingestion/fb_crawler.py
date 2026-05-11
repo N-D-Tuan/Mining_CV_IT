@@ -49,7 +49,6 @@ current_key_index = 0
 ai_client = None
 
 def get_db_connection():
-    """Tạo kết nối database"""
     return psycopg2.connect(
         host=DB_HOST,
         port=DB_PORT,
@@ -59,7 +58,6 @@ def get_db_connection():
     )
 
 def get_active_fb_groups():
-    """Lấy danh sách các nhóm FB active từ database"""
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -75,7 +73,6 @@ def get_active_fb_groups():
         conn.close()
 
 def update_group_crawl_info(group_id, crawl_count_today):
-    """Cập nhật thông tin crawl cho nhóm"""
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
@@ -89,12 +86,10 @@ def update_group_crawl_info(group_id, crawl_count_today):
         conn.close()
 
 def reset_daily_crawl_counts():
-    """Reset số lần crawl trong ngày nếu là ngày mới"""
     today = date.today()
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            # Kiểm tra xem đã reset hôm nay chưa
             cursor.execute("""
                 SELECT COUNT(*) FROM fb_groups 
                 WHERE DATE(last_crawl) < %s AND crawl_count_today > 0
@@ -109,20 +104,6 @@ def reset_daily_crawl_counts():
                 print("[*] Đã reset số lần crawl hàng ngày")
     finally:
         conn.close()
-
-API_KEYS = [
-    os.getenv("GEMINI_API_KEY_1"),
-    os.getenv("GEMINI_API_KEY_2"),
-    os.getenv("GEMINI_API_KEY_3")
-]
-API_KEYS = [key for key in API_KEYS if key] 
-
-if not API_KEYS:
-    print("[!] Lỗi: Không tìm thấy GEMINI_API_KEY nào trong file .env!")
-    exit()
-
-current_key_index = 0
-ai_client = None
 
 def init_ai_client():
     global ai_client
@@ -205,7 +186,7 @@ def parse_post_with_ai(raw_text, post_link, name_group):
     return None
 
 # ==========================================
-# 3. CRAWLER CHÍNH
+# 3. CORE CHÍNH: SELENIUM & SCRAPING
 # ==========================================
 def init_driver():
     options = webdriver.ChromeOptions()
@@ -233,243 +214,261 @@ def perform_login(driver):
     except:
         pass_field.send_keys(Keys.ENTER)
 
-def crawl_fb_group(group_url, name_group, max_posts_to_scrape):
+def setup_facebook_session():
+    """Hàm độc lập để mở trình duyệt và chuẩn bị kết nối Facebook 1 lần duy nhất"""
     driver = init_driver()
-    scraped_jobs = [] 
-    processed_hashes = set() 
-    processed_links = set()
+    login_success = False
     
-    try:
-        login_success = False
-        for attempt in range(1, 4): 
-            print(f"\n[*] Mở Facebook (Lượt đăng nhập: {attempt}/3)...")
-            driver.get("https://www.facebook.com/")
-            time.sleep(random.uniform(3, 5))
+    for attempt in range(1, 4): 
+        print(f"\n[*] Mở Facebook (Lượt kiểm tra: {attempt}/3)...")
+        driver.get("https://www.facebook.com/")
+        time.sleep(random.uniform(3, 5))
+        
+        check_email_exist = driver.find_elements(By.NAME, "email")
+        if len(check_email_exist) == 0:
+            print("[*] NHẬN DIỆN PROFILE THẬT: Tài khoản đã được đăng nhập sẵn! Bỏ qua toàn bộ bước nhập liệu và Captcha.")
+            login_success = True
+            break
+        else:
+            print("[*] Profile hiện tại chưa đăng nhập, tiến hành nhập thông tin dự phòng...")
+            try:
+                perform_login(driver)
+            except Exception as e:
+                print(f"[!] Lỗi form đăng nhập: {e}")
+                driver.quit()
+                return None
             
-            # --- KIỂM TRA ĐÃ ĐĂNG NHẬP HAY CHƯA ---
-            check_email_exist = driver.find_elements(By.NAME, "email")
-            if len(check_email_exist) == 0:
-                print("[*] Phát hiện tài khoản đã được đăng nhập (hoặc vừa qua bước xác thực)! Bỏ qua nhập liệu.")
+        time.sleep(random.uniform(8, 12))
+        current_url = driver.current_url
+        
+        if "challenge" in current_url or "two_step_verification" in current_url or "checkpoint" in current_url:
+            print(f"[!] BỊ YÊU CẦU XÁC THỰC! URL hiện tại: {current_url}")
+            if attempt == 1:
+                time.sleep(10)
+                continue 
             else:
-                print("[*] Form đăng nhập xuất hiện, tiến hành nhập thông tin...")
-                try:
-                    perform_login(driver)
-                except Exception as e:
-                    print(f"[!] Lỗi form đăng nhập: {e}")
-                    return []
+                time.sleep(60) 
+                driver.quit()
+                return None
+        else:
+            email_inputs = driver.find_elements(By.NAME, "email")
+            if len(email_inputs) > 0:
+                print("[!] CẢNH BÁO: Vẫn kẹt ở màn hình ngoài. Chờ vòng lặp sau...")
+                if attempt < 2:
+                    time.sleep(3)
+                    continue
+                else:
+                    print("[!] Đăng nhập thất bại. Dừng bot.")
+                    driver.quit()
+                    return None
+            else:
+                print("[*] Đăng nhập thành công, form login đã biến mất!")
+                login_success = True
+                break 
+    
+    if login_success:
+        return driver
+    else:
+        driver.quit()
+        return None
+
+def scrape_single_group(driver, group_url, name_group, max_posts_to_scrape, processed_hashes, processed_links):
+    """Hàm cào dữ liệu cho 1 nhóm dựa trên trình duyệt (driver) đang có sẵn"""
+    scraped_jobs = [] 
+    
+    print(f"\n[*] Chuyển hướng vào Group: {group_url}")
+    driver.get(group_url)
+    time.sleep(random.uniform(6, 10)) # Đợi trang nhóm tải xong
+    
+    print("\n[*] ================= BẮT ĐẦU QUÉT TỪNG BÀI =================")
+    
+    scroll_attempts = 0
+    
+    while len(scraped_jobs) < max_posts_to_scrape and scroll_attempts < 10:
+        content_boxes = driver.find_elements(By.XPATH, "//div[@data-ad-rendering-role='story_message' or @data-ad-comet-preview='message']") 
+        found_new_post_on_screen = False
+        
+        for index in range(len(content_boxes)):
+            try:
+                current_boxes = driver.find_elements(By.XPATH, "//div[@data-ad-rendering-role='story_message' or @data-ad-comet-preview='message']")
+                if index >= len(current_boxes): break
+                box = current_boxes[index]
+
+                raw_text = box.text.strip()
+                if len(raw_text) < 5: 
+                    continue
                 
-            time.sleep(random.uniform(8, 12))
-            current_url = driver.current_url
-            
-            if "challenge" in current_url or "two_step_verification" in current_url or "checkpoint" in current_url:
-                print(f"[!] BỊ YÊU CẦU XÁC THỰC! URL hiện tại: {current_url}")
-                if attempt == 1:
-                    time.sleep(10)
-                    continue 
-                else:
-                    time.sleep(60) 
-                    return []
-            else:
-                email_inputs = driver.find_elements(By.NAME, "email")
-                if len(email_inputs) > 0:
-                    print("[!] CẢNH BÁO: Vẫn kẹt ở màn hình ngoài. Chờ vòng lặp sau...")
-                    if attempt < 2:
-                        time.sleep(3)
-                        continue
-                    else:
-                        print("[!] Đăng nhập thất bại. Dừng bot.")
-                        return []
-                else:
-                    print("[*] Đăng nhập thành công, form login đã biến mất!")
-                    login_success = True
-                    break 
-        
-        if not login_success:
-            return []
+                clean_text = re.sub(r'\s+', '', raw_text)
+                short_fingerprint = clean_text[:20] 
+                
+                if short_fingerprint in processed_hashes:
+                    continue
 
-        print(f"\n[*] Vào Group: {group_url}")
-        driver.get(group_url)
-        time.sleep(random.uniform(5, 8))
-        
-        print("\n[*] ================= BẮT ĐẦU QUÉT TỪNG BÀI =================")
-        
-        scroll_attempts = 0
-        
-        while len(scraped_jobs) < max_posts_to_scrape and scroll_attempts < 10:
-            content_boxes = driver.find_elements(By.XPATH, "//div[@data-ad-rendering-role='story_message' or @data-ad-comet-preview='message']") 
-            found_new_post_on_screen = False
-            
-            for index in range(len(content_boxes)):
-                try:
-                    # Lấy lại danh sách box để tránh lỗi Stale
-                    current_boxes = driver.find_elements(By.XPATH, "//div[@data-ad-rendering-role='story_message' or @data-ad-comet-preview='message']")
-                    if index >= len(current_boxes): break
-                    box = current_boxes[index]
-
-                    raw_text = box.text.strip()
-                    # FIX 2: Bỏ qua nếu chữ rỗng, còn chữ ngắn (Chen Sushi) thì vẫn giữ
-                    if len(raw_text) < 5: 
-                        continue
-                    
-                    # FIX 1: TẠO DẤU VÂN TAY CHUẨN XÁC TỪ 20 KÝ TỰ ĐẦU
-                    clean_text = re.sub(r'\s+', '', raw_text)
-                    short_fingerprint = clean_text[:20] 
-                    
-                    if short_fingerprint in processed_hashes:
-                        continue
-
-                    found_new_post_on_screen = True
-                    print(f"\n--- Đang xử lý Bài đăng thứ {len(scraped_jobs) + 1} ---")
-                    
-                    driver.execute_script("arguments[0].scrollIntoView({block: 'center', behavior: 'smooth'});", box)
-                    time.sleep(1.5)
-                    
-                    # CLICK "XEM THÊM" VÀ TÌM LẠI CHÍNH XÁC BOX ĐÓ
-                    see_more_btns = box.find_elements(By.XPATH, ".//*[contains(., 'Xem thêm') or contains(., 'See more')]")
-                    if see_more_btns:
-                        try:
-                            driver.execute_script("arguments[0].click();", see_more_btns[-1])
-                            print("    [✓] Đã click 'Xem thêm'")
-                            time.sleep(random.uniform(1.5, 2.5)) 
-                            
-                            fresh_boxes = driver.find_elements(By.XPATH, "//div[@data-ad-rendering-role='story_message' or @data-ad-comet-preview='message']")
-                            for fbox in fresh_boxes:
-                                fbox_text = fbox.text.strip()
-                                # KHỚP DẤU VÂN TAY: Chắc chắn 100% tìm lại đúng bài đăng
-                                if re.sub(r'\s+', '', fbox_text).startswith(short_fingerprint):
-                                    box = fbox  # ĐÃ TÓM ĐƯỢC CHÍNH XÁC BOX MỚI
-                                    raw_text = fbox_text
-                                    break
-                        except:
-                            pass
-                            
-                    # DỌN RÁC
-                    raw_text = raw_text.replace("… Xem thêm", "").replace("Xem thêm", "").replace("Ẩn bớt", "").strip()
-                    preview_text = raw_text.replace('\n', ' ')[:60]
-                    print(f"    [Đọc] '{preview_text}...'")
-
-                    # =========================================================
-                    # FIX 3: LẤY LINK TỪ BÀI GỐC & BÀI SHARE
-                    # =========================================================
-                    post_link = "N/A"
-
+                found_new_post_on_screen = True
+                print(f"\n--- Đang xử lý Bài đăng thứ {len(scraped_jobs) + 1} của {name_group} ---")
+                
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center', behavior: 'smooth'});", box)
+                time.sleep(1.5)
+                
+                see_more_btns = box.find_elements(By.XPATH, ".//*[contains(., 'Xem thêm') or contains(., 'See more')]")
+                if see_more_btns:
                     try:
-                        all_links = box.find_elements(By.XPATH, "./ancestor::div[position() <= 15]//a")
+                        driver.execute_script("arguments[0].click();", see_more_btns[-1])
+                        print("    [✓] Đã click 'Xem thêm'")
+                        time.sleep(random.uniform(1.5, 2.5)) 
+                        
+                        fresh_boxes = driver.find_elements(By.XPATH, "//div[@data-ad-rendering-role='story_message' or @data-ad-comet-preview='message']")
+                        for fbox in fresh_boxes:
+                            fbox_text = fbox.text.strip()
+                            if re.sub(r'\s+', '', fbox_text).startswith(short_fingerprint):
+                                box = fbox  
+                                raw_text = fbox_text
+                                break
+                    except:
+                        pass
+                        
+                raw_text = raw_text.replace("… Xem thêm", "").replace("Xem thêm", "").replace("Ẩn bớt", "").strip()
+                preview_text = raw_text.replace('\n', ' ')[:60]
+                print(f"    [Đọc] '{preview_text}...'")
+
+                post_link = "N/A"
+
+                try:
+                    all_links = box.find_elements(By.XPATH, "./ancestor::div[position() <= 15]//a")
+                    for a in all_links:
+                        href = a.get_attribute("href")
+                        if href and ("/groups/" in href):
+                            if "/permalink/" in href or "/posts/" in href or "/multi_permalinks/" in href or "/share/" in href:
+                                post_link = href.split('?')[0]
+                                break
+                except Exception:
+                    pass
+                
+                if post_link == "N/A":
+                    try:
                         for a in all_links:
                             href = a.get_attribute("href")
-                            if href and ("/groups/" in href):
-                                if "/permalink/" in href or "/posts/" in href or "/multi_permalinks/" in href or "/share/" in href:
-                                    post_link = href.split('?')[0]
-                                    break
-                    except Exception:
+                            if href and ("/user/" in href and "/groups/" in href):
+                                post_link = href.split('?')[0]
+                                break
+                    except:
                         pass
-                    
-                    # Phương án dự phòng link
-                    if post_link == "N/A":
-                        try:
-                            for a in all_links:
-                                href = a.get_attribute("href")
-                                if href and ("/user/" in href and "/groups/" in href):
-                                    post_link = href.split('?')[0]
-                                    break
-                        except:
-                            pass
 
-                    print(f"    + Link: {post_link[:40]}...")
+                print(f"    + Link: {post_link[:40]}...")
 
-                    # GỬI AI PHÂN TÍCH
-                    job_data = parse_post_with_ai(raw_text, post_link, name_group)
-                    
-                    if job_data == "INVALID":
-                        print("    [!] BỎ QUA: AI lọc rác (Không phải bài tuyển dụng).")
-                    elif job_data:
-                        job_data.pop("is_valid_job_post", None)
-                        scraped_jobs.append(job_data)
-                        print(f"    [★] LƯU THÀNH CÔNG: {job_data.get('title')}")
-
-                    # LƯU VÀO BỘ NHỚ ĐỂ CHỐNG TRÙNG LẶP CHO LẦN SAU
+                # KIỂM TRA TRÙNG LẶP LINK Ở ĐÂY ĐỂ TRÁNH LÃNG PHÍ API
+                if post_link != "N/A" and post_link in processed_links:
+                    print("    [!] Đã cào link này ở nhóm trước. Bỏ qua.")
                     processed_hashes.add(short_fingerprint)
-                    if post_link != "N/A":
-                        processed_links.add(post_link)
-                    
-                    scroll_attempts = 0
-                    break # Thoát vòng lặp con để quét lại từ đầu
-
-                except Exception as e:
-                    if "stale element" not in str(e):
-                        print(f"    [LỖI] {e}")
                     continue
-                    
-            if not found_new_post_on_screen:
-                print("    [*] Đang bám vào bài cuối cùng và cuộn xuống từ từ để quét...")
-                current_boxes_scroll = driver.find_elements(By.XPATH, "//div[@data-ad-rendering-role='story_message' or @data-ad-comet-preview='message']")
-                if current_boxes_scroll:
-                    driver.execute_script("arguments[0].scrollIntoView({block: 'start', behavior: 'smooth'});", current_boxes_scroll[-1])
-                else:
-                    driver.execute_script("window.scrollBy(0, 500);")
-                time.sleep(random.uniform(2, 4))
-                scroll_attempts += 1
+
+                job_data = parse_post_with_ai(raw_text, post_link, name_group)
                 
-    finally:
-        print("\n[*] Đóng trình duyệt.")
-        driver.quit()
-        
+                if job_data == "INVALID":
+                    print("    [!] BỎ QUA: AI lọc rác (Không phải bài tuyển dụng).")
+                elif job_data:
+                    job_data.pop("is_valid_job_post", None)
+                    scraped_jobs.append(job_data)
+                    print(f"    [★] LƯU THÀNH CÔNG: {job_data.get('title')}")
+
+                processed_hashes.add(short_fingerprint)
+                if post_link != "N/A":
+                    processed_links.add(post_link)
+                
+                scroll_attempts = 0
+                break 
+
+            except Exception as e:
+                if "stale element" not in str(e):
+                    print(f"    [LỖI] {e}")
+                continue
+                
+        if not found_new_post_on_screen:
+            print("    [*] Đang bám vào bài cuối cùng và cuộn xuống từ từ để quét...")
+            current_boxes_scroll = driver.find_elements(By.XPATH, "//div[@data-ad-rendering-role='story_message' or @data-ad-comet-preview='message']")
+            if current_boxes_scroll:
+                driver.execute_script("arguments[0].scrollIntoView({block: 'start', behavior: 'smooth'});", current_boxes_scroll[-1])
+            else:
+                driver.execute_script("window.scrollBy(0, 500);")
+            time.sleep(random.uniform(2, 4))
+            scroll_attempts += 1
+            
     return scraped_jobs
 
+# ==========================================
+# 4. CHẠY CHƯƠNG TRÌNH CHÍNH
+# ==========================================
 if __name__ == "__main__":
-    # Reset số lần crawl hàng ngày nếu cần
     reset_daily_crawl_counts()
     
-    # Lấy danh sách các nhóm active
     groups = get_active_fb_groups()
     
     if not groups:
         print("[!] Không có nhóm FB nào active để crawl.")
         exit()
     
+    # 1. KHỞI TẠO VÀ ĐĂNG NHẬP 1 LẦN DUY NHẤT
+    driver = setup_facebook_session()
+    if not driver:
+        print("[!] Không thể thiết lập phiên đăng nhập. Dừng chương trình.")
+        exit()
+    
     all_scraped_jobs = []
     
-    for group in groups:
-        group_id = group['id']
-        group_name = group['name']
-        group_url = group['url']
-        current_crawl_count = group['crawl_count_today']
-        max_posts = group['max_posts_per_crawl']
-        
-        print(f"\n{'='*60}")
-        print(f"CRAWLING GROUP: {group_name}")
-        print(f"URL: {group_url}")
-        print(f"Đã crawl hôm nay: {current_crawl_count} lần")
-        print(f"{'='*60}")
-        
-        # Crawl nhóm này
-        scraped_jobs = crawl_fb_group(group_url, group_name, max_posts)
-        
-        if scraped_jobs:
-            all_scraped_jobs.extend(scraped_jobs)
-            print(f"[✓] Crawl thành công {len(scraped_jobs)} jobs từ {group_name}")
-        else:
-            print(f"[!] Không crawl được job nào từ {group_name}")
-        
-        # Cập nhật thông tin crawl trong DB
-        new_crawl_count = current_crawl_count + 1
-        update_group_crawl_info(group_id, new_crawl_count)
-        
-        # Nghỉ giữa các nhóm để tránh bị block
-        if len(groups) > 1:
-            print("[*] Nghỉ 30s trước khi chuyển sang nhóm tiếp theo...")
-            time.sleep(30)
+    # BỘ NHỚ LƯU TRỮ XUYÊN SUỐT CÁC NHÓM ĐỂ CHỐNG TRÙNG LẶP CHÉO
+    global_processed_hashes = set()
+    global_processed_links = set()
     
-    # Lưu tất cả jobs vào CSV
-    if all_scraped_jobs:
-        df = pd.DataFrame(all_scraped_jobs)
-        columns_order = [
-            'title', 'employer_name', 'raw_salary', 'min_salary', 'max_salary', 'salary_type',
-            'city', 'address', 'job_type', 'experience_required', 'requirements', 
-            'post_content', 'link', 'source'
-        ]
-        df = df[[col for col in columns_order if col in df.columns]]
-        df.to_csv(CSV_FILE_PATH, index=False, encoding='utf-8-sig')
-        print(f"\n=> [HOÀN TẤT] Đã lưu tổng cộng {len(all_scraped_jobs)} công việc từ {len(groups)} nhóm vào '{CSV_FILE_PATH}'!")
-    else:
-        print("\n=> [THẤT BẠI] Không cào được công việc nào từ tất cả các nhóm.")
+    try:
+        # 2. LẶP QUA TỪNG NHÓM (DÙNG CHUNG TRÌNH DUYỆT)
+        for index, group in enumerate(groups):
+            group_id = group['id']
+            group_name = group['name']
+            group_url = group['url']
+            current_crawl_count = group['crawl_count_today']
+            max_posts = group['max_posts_per_crawl']
+            
+            print(f"\n{'='*60}")
+            print(f"CRAWLING GROUP [{index+1}/{len(groups)}]: {group_name}")
+            print(f"URL: {group_url}")
+            print(f"Đã crawl hôm nay: {current_crawl_count} lần")
+            print(f"{'='*60}")
+            
+            scraped_jobs = scrape_single_group(
+                driver, group_url, group_name, max_posts, 
+                global_processed_hashes, global_processed_links
+            )
+            
+            if scraped_jobs:
+                all_scraped_jobs.extend(scraped_jobs)
+                print(f"[✓] Crawl thành công {len(scraped_jobs)} jobs từ {group_name}")
+            else:
+                print(f"[!] Không crawl được job nào từ {group_name}")
+            
+            new_crawl_count = current_crawl_count + 1
+            update_group_crawl_info(group_id, new_crawl_count)
+            
+            # NGHỈ NGƠI TRƯỚC KHI CHUYỂN NHÓM (Nghỉ 8-10 giây để làm giống người thật)
+            if index < len(groups) - 1:
+                sleep_time = random.uniform(8, 10)
+                print(f"[*] Đã xong nhóm này. Dừng {sleep_time:.1f} giây trước khi chuyển sang nhóm tiếp theo...")
+                time.sleep(sleep_time)
+                
+    finally:
+        # 3. CHỈ ĐÓNG TRÌNH DUYỆT KHI ĐÃ CÀO XONG TẤT CẢ CÁC NHÓM
+        print("\n[*] Đã hoàn tất danh sách nhóm. Tiến hành đóng trình duyệt.")
+        driver.quit()
+        
+        # XUẤT FILE
+        if all_scraped_jobs:
+            df = pd.DataFrame(all_scraped_jobs)
+            columns_order = [
+                'title', 'employer_name', 'raw_salary', 'min_salary', 'max_salary', 'salary_type',
+                'city', 'address', 'job_type', 'experience_required', 'requirements', 
+                'post_content', 'link', 'source'
+            ]
+            df = df[[col for col in columns_order if col in df.columns]]
+            df.to_csv(CSV_FILE_PATH, index=False, encoding='utf-8-sig')
+            print(f"\n=> [HOÀN TẤT] Đã lưu tổng cộng {len(all_scraped_jobs)} công việc vào '{CSV_FILE_PATH}'!")
+        else:
+            print("\n=> [THẤT BẠI] Không cào được công việc nào từ tất cả các nhóm.")
