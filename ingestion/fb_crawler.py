@@ -178,8 +178,8 @@ def parse_post_with_ai(raw_text, post_link, name_group):
                 switch_api_key()
                 time.sleep(2)
             elif "503" in err_msg or "UNAVAILABLE" in err_msg:
-                print(f"    [!] Server Google đang bận (Lỗi 503). Chờ 10s thử lại...")
-                time.sleep(10)
+                print(f"    [!] Server Google đang bận (Lỗi 503). Chờ 5s thử lại...")
+                time.sleep(5)
             else:
                 print(f"    [!] Lỗi AI không xác định: {err_msg}")
                 break
