@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     
     -- Tính chất công việc
     job_type VARCHAR(100),        -- Loại hình (Part-time, Full-time, Ca gãy, Ca xoay)
-    experience_required VARCHAR(100), -- Yêu cầu kinh nghiệm
+    experience_required VARCHAR(255), -- Yêu cầu kinh nghiệm
     requirements TEXT[],          -- Yêu cầu khác lưu dạng mảng (VD: '{"Có xe máy", "Nữ"}')
     
     -- Nguồn dữ liệu Facebook
