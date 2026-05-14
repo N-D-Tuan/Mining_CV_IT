@@ -37,7 +37,8 @@ DB_PASSWORD = os.getenv("DB_PASSWORD", "password")
 API_KEYS = [
     os.getenv("GEMINI_API_KEY_1"),
     os.getenv("GEMINI_API_KEY_2"),
-    os.getenv("GEMINI_API_KEY_3")
+    os.getenv("GEMINI_API_KEY_3"),
+    os.getenv("GEMINI_API_KEY_4")
 ]
 API_KEYS = [key for key in API_KEYS if key] 
 
@@ -123,13 +124,15 @@ def switch_api_key():
 init_ai_client()
 
 # ==========================================
-# 2. HÀM AI PARSER
+# 2. HÀM AI PARSER (THÊM CHỨC NĂNG ĐỌC ẢNH)
 # ==========================================
-def parse_post_with_ai(raw_text, post_link, name_group):
+def parse_post_with_ai(raw_text, post_link, name_group, image_text=None):
     prompt = f"""
     Bạn là một trợ lý ảo thông minh chuyên phân tích dữ liệu tuyển dụng việc làm.
-    Nhiệm vụ 1: Đọc bài viết sau. Nếu đây KHÔNG PHẢI là bài tuyển dụng việc làm hợp lệ (VD: bài bán hàng, phốt, hỏi đáp, tìm trọ), hãy trả về JSON: {{"is_valid_job_post": false}}
-    Nhiệm vụ 2: Nếu ĐÚNG là bài tuyển dụng, hãy trích xuất thành ĐÚNG MỘT OBJECT JSON:
+    Nhiệm vụ 1: Đọc nội dung chữ và GIÁ TRỊ TỪ THẺ IMG (nếu có). Nếu dữ liệu từ thẻ img tương tự hoặc trùng lặp với nội dung chữ, hãy bỏ qua phần trùng.
+    Mục tiêu: giữ lại chỉ nội dung liên quan đến tuyển dụng.
+    Mục tiêu 2: Nếu đây KHÔNG PHẢI là bài tuyển dụng việc làm hợp lệ (VD: bài bán hàng, phốt, hỏi đáp, tìm trọ), hãy trả về JSON: {{"is_valid_job_post": false}}
+    Mục tiêu 3: Nếu ĐÚNG là bài tuyển dụng, hãy trích xuất thành ĐÚNG MỘT OBJECT JSON và kết hợp thông tin từ chữ + nội dung img thành trường "post_content" mà không lặp lại nội dung.
     
     {{
         "is_valid_job_post": true,
@@ -143,17 +146,32 @@ def parse_post_with_ai(raw_text, post_link, name_group):
         "address": "(string) Địa chỉ cụ thể",
         "job_type": "(string) Loại hình",
         "experience_required": "(string) Yêu cầu kinh nghiệm",
-        "requirements": ["Yêu cầu 1", "Yêu cầu 2"]
+        "requirements": ["Yêu cầu 1", "Yêu cầu 2"],
+        "post_content": "(string) Nội dung đầy đủ của bài đăng, kết hợp từ text và img, bỏ phần trùng lặp, chỉ giữ thông tin tuyển dụng"
     }}
     
     Tuyệt đối không giải thích thêm.
     
-    Bài đăng:
+    Bài đăng (Phần chữ):
     '''
     {raw_text}
     '''
     """
-    
+
+    if image_text:
+        prompt += f"""
+
+    Dữ liệu từ thẻ img:
+    '''
+    {image_text}
+    '''
+    """
+
+    prompt += """
+
+    Nếu dữ liệu trong ảnh trùng lặp với nội dung chữ, chỉ giữ một lần. Nếu chỉ dữ liệu trong ảnh mới có thông tin tuyển dụng quan trọng, hãy thêm vào post_content.
+    """
+
     for attempt in range(6):
         try:
             response = ai_client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
@@ -166,11 +184,11 @@ def parse_post_with_ai(raw_text, post_link, name_group):
                     job_data['requirements'] = ", ".join(job_data['requirements'])
                 else:
                     job_data['requirements'] = None
-                job_data['post_content'] = raw_text
+                if 'post_content' not in job_data:
+                    job_data['post_content'] = raw_text
                 job_data['link'] = post_link
                 job_data['source'] = name_group
                 return job_data
-                
         except Exception as e:
             err_msg = str(e)
             if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
@@ -215,7 +233,6 @@ def perform_login(driver):
         pass_field.send_keys(Keys.ENTER)
 
 def setup_facebook_session():
-    """Hàm độc lập để mở trình duyệt và chuẩn bị kết nối Facebook 1 lần duy nhất"""
     driver = init_driver()
     login_success = False
     
@@ -226,7 +243,7 @@ def setup_facebook_session():
         
         check_email_exist = driver.find_elements(By.NAME, "email")
         if len(check_email_exist) == 0:
-            print("[*] NHẬN DIỆN PROFILE THẬT: Tài khoản đã được đăng nhập sẵn! Bỏ qua toàn bộ bước nhập liệu và Captcha.")
+            print("[*] NHẬN DIỆN PROFILE THẬT: Tài khoản đã được đăng nhập sẵn! Bỏ qua toàn bộ bước nhập liệu.")
             login_success = True
             break
         else:
@@ -247,7 +264,7 @@ def setup_facebook_session():
                 time.sleep(10)
                 continue 
             else:
-                time.sleep(60) 
+                time.sleep(10) 
                 driver.quit()
                 return None
         else:
@@ -273,12 +290,11 @@ def setup_facebook_session():
         return None
 
 def scrape_single_group(driver, group_url, name_group, max_posts_to_scrape, processed_hashes, processed_links):
-    """Hàm cào dữ liệu cho 1 nhóm dựa trên trình duyệt (driver) đang có sẵn"""
     scraped_jobs = [] 
     
     print(f"\n[*] Chuyển hướng vào Group: {group_url}")
     driver.get(group_url)
-    time.sleep(random.uniform(6, 10)) # Đợi trang nhóm tải xong
+    time.sleep(random.uniform(6, 10)) 
     
     print("\n[*] ================= BẮT ĐẦU QUÉT TỪNG BÀI =================")
     
@@ -314,7 +330,6 @@ def scrape_single_group(driver, group_url, name_group, max_posts_to_scrape, proc
                 if see_more_btns:
                     try:
                         driver.execute_script("arguments[0].click();", see_more_btns[-1])
-                        print("    [✓] Đã click 'Xem thêm'")
                         time.sleep(random.uniform(1.5, 2.5)) 
                         
                         fresh_boxes = driver.find_elements(By.XPATH, "//div[@data-ad-rendering-role='story_message' or @data-ad-comet-preview='message']")
@@ -332,15 +347,46 @@ def scrape_single_group(driver, group_url, name_group, max_posts_to_scrape, proc
                 print(f"    [Đọc] '{preview_text}...'")
 
                 post_link = "N/A"
+                image_text = None
 
                 try:
-                    all_links = box.find_elements(By.XPATH, "./ancestor::div[position() <= 15]//a")
+                    wrapper = box.find_element(By.XPATH, "./ancestor::div[position() <= 15]")
+                    
+                    # 1. TÌM LINK
+                    all_links = wrapper.find_elements(By.TAG_NAME, "a")
                     for a in all_links:
                         href = a.get_attribute("href")
                         if href and ("/groups/" in href):
                             if "/permalink/" in href or "/posts/" in href or "/multi_permalinks/" in href or "/share/" in href:
                                 post_link = href.split('?')[0]
                                 break
+                    
+                    # 2. LẤY NỘI DUNG TỪ THẺ IMG
+                    imgs = wrapper.find_elements(By.TAG_NAME, "img")
+                    candidate_texts = []
+                    for img in imgs:
+                        src = img.get_attribute("src")
+                        if not src or "emoji" in src or "images/ext" in src:
+                            continue
+                        alt = (img.get_attribute("alt") or "").strip()
+                        aria = (img.get_attribute("aria-label") or "").strip()
+                        text_candidate = "".join([part for part in [alt, aria] if part])
+                        if not text_candidate:
+                            continue
+                        # Loại bỏ các mô tả không liên quan / quá ngắn
+                        if len(text_candidate) < 30:
+                            continue
+                        size = img.size
+                        area = size['width'] * size['height']
+                        if area < 10000:
+                            continue
+                        candidate_texts.append((area, text_candidate))
+                    if candidate_texts:
+                        candidate_texts.sort(reverse=True, key=lambda item: item[0])
+                        image_text = candidate_texts[0][1]
+                        # Nếu text này đã có trong raw_text thì không cần thêm
+                        if image_text and image_text in raw_text:
+                            image_text = None
                 except Exception:
                     pass
                 
@@ -356,13 +402,12 @@ def scrape_single_group(driver, group_url, name_group, max_posts_to_scrape, proc
 
                 print(f"    + Link: {post_link[:40]}...")
 
-                # KIỂM TRA TRÙNG LẶP LINK Ở ĐÂY ĐỂ TRÁNH LÃNG PHÍ API
                 if post_link != "N/A" and post_link in processed_links:
                     print("    [!] Đã cào link này ở nhóm trước. Bỏ qua.")
                     processed_hashes.add(short_fingerprint)
                     continue
 
-                job_data = parse_post_with_ai(raw_text, post_link, name_group)
+                job_data = parse_post_with_ai(raw_text, post_link, name_group, image_text)
                 
                 if job_data == "INVALID":
                     print("    [!] BỎ QUA: AI lọc rác (Không phải bài tuyển dụng).")
@@ -407,7 +452,6 @@ if __name__ == "__main__":
         print("[!] Không có nhóm FB nào active để crawl.")
         exit()
     
-    # 1. KHỞI TẠO VÀ ĐĂNG NHẬP 1 LẦN DUY NHẤT
     driver = setup_facebook_session()
     if not driver:
         print("[!] Không thể thiết lập phiên đăng nhập. Dừng chương trình.")
@@ -415,12 +459,10 @@ if __name__ == "__main__":
     
     all_scraped_jobs = []
     
-    # BỘ NHỚ LƯU TRỮ XUYÊN SUỐT CÁC NHÓM ĐỂ CHỐNG TRÙNG LẶP CHÉO
     global_processed_hashes = set()
     global_processed_links = set()
     
     try:
-        # 2. LẶP QUA TỪNG NHÓM (DÙNG CHUNG TRÌNH DUYỆT)
         for index, group in enumerate(groups):
             group_id = group['id']
             group_name = group['name']
@@ -448,18 +490,15 @@ if __name__ == "__main__":
             new_crawl_count = current_crawl_count + 1
             update_group_crawl_info(group_id, new_crawl_count)
             
-            # NGHỈ NGƠI TRƯỚC KHI CHUYỂN NHÓM (Nghỉ 8-10 giây để làm giống người thật)
             if index < len(groups) - 1:
                 sleep_time = random.uniform(8, 10)
                 print(f"[*] Đã xong nhóm này. Dừng {sleep_time:.1f} giây trước khi chuyển sang nhóm tiếp theo...")
                 time.sleep(sleep_time)
                 
     finally:
-        # 3. CHỈ ĐÓNG TRÌNH DUYỆT KHI ĐÃ CÀO XONG TẤT CẢ CÁC NHÓM
         print("\n[*] Đã hoàn tất danh sách nhóm. Tiến hành đóng trình duyệt.")
         driver.quit()
         
-        # XUẤT FILE
         if all_scraped_jobs:
             df = pd.DataFrame(all_scraped_jobs)
             columns_order = [
@@ -471,4 +510,4 @@ if __name__ == "__main__":
             df.to_csv(CSV_FILE_PATH, index=False, encoding='utf-8-sig')
             print(f"\n=> [HOÀN TẤT] Đã lưu tổng cộng {len(all_scraped_jobs)} công việc vào '{CSV_FILE_PATH}'!")
         else:
-            print("\n=> [THẤT BẠI] Không cào được công việc nào từ tất cả các nhóm.")
+            print("\n=> [THẤT BẠI] Không cào được công việc nào từ tất cả các nhóm.")                    

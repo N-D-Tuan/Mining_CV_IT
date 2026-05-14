@@ -23,7 +23,8 @@ def insert_sample_fb_groups():
         with conn.cursor() as cursor:
             # Insert sample groups
             groups = [
-                ("Việc làm part time cho Sinh viên tại Đà Nẵng", "https://www.facebook.com/groups/1574002216182702", 5),
+                ("Việc Làm Thời Vụ - Part Time Đà Nẵng", "https://www.facebook.com/groups/725703916963999", 5),
+                # ("Việc làm part time cho Sinh viên tại Đà Nẵng", "https://www.facebook.com/groups/1574002216182702", 5),
                 # ("Facebook Group Part-time", "https://www.facebook.com/groups/359677107104158/", 5),
                 # Thêm các nhóm khác ở đây
                 # ("Tên nhóm khác", "https://www.facebook.com/groups/...", 5),
