@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     employer_name VARCHAR(255),   -- Tên quán/Người tuyển dụng (Thay cho Company)
     
     -- Lương thưởng
-    raw_salary VARCHAR(255),      -- Lương gốc (VD: "22k-25k/h", "3tr/tháng + bao ăn")
+    raw_salary TEXT,      -- Lương gốc (VD: "22k-25k/h", "3tr/tháng + bao ăn")
     min_salary BIGINT,            -- Chuẩn hóa số (VD: 22000)
     max_salary BIGINT,            -- Chuẩn hóa số (VD: 25000)
     salary_type VARCHAR(50),      -- Loại lương: 'hourly' (theo giờ), 'daily' (theo ngày), 'monthly' (theo tháng)
