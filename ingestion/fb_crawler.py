@@ -3,6 +3,7 @@ import random
 import json
 import re
 import os
+import hashlib
 import pandas as pd
 from dotenv import load_dotenv
 from selenium import webdriver
@@ -28,17 +29,19 @@ FB_PASSWORD = os.getenv("FB_PASSWORD")
 CSV_FILE_PATH = "fb_parttime_jobs_raw.csv"
 
 # Database configuration
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "5432")
-DB_NAME = os.getenv("DB_NAME", "mining_jobs_db")
-DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "password")
+DB_HOST = os.getenv("DB_HOST")
+DB_PORT = os.getenv("DB_PORT")
+DB_NAME = os.getenv("DB_NAME")
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
 
 API_KEYS = [
     os.getenv("GEMINI_API_KEY_1"),
     os.getenv("GEMINI_API_KEY_2"),
     os.getenv("GEMINI_API_KEY_3"),
-    os.getenv("GEMINI_API_KEY_4")
+    os.getenv("GEMINI_API_KEY_4"),
+    os.getenv("GEMINI_API_KEY_5"),
+    os.getenv("GEMINI_API_KEY_6")
 ]
 API_KEYS = [key for key in API_KEYS if key] 
 
@@ -124,9 +127,50 @@ def switch_api_key():
 init_ai_client()
 
 # ==========================================
-# 2. HÀM AI PARSER (THÊM CHỨC NĂNG ĐỌC ẢNH)
+# 2. HÀM AI PARSER VÀ HEURISTIC PRE-FILTER
 # ==========================================
+
+def is_potential_job_post(text):
+    """
+    Bộ lọc sơ bộ (Heuristic) để xác định bài viết có khả năng là bài tuyển dụng hay không.
+    Giúp giảm tải gọi API AI cho các bài đăng rác (bán hàng, tìm việc, tìm trọ).
+    """
+    text_lower = text.lower()
+
+    # 1. Lọc các bài đăng của ứng viên tự tìm việc
+    applicant_keywords = [
+        "em cần tìm", "mình cần tìm", "em tìm việc", "mình tìm việc", "cần tìm việc",
+        "tìm việc part", "có việc gì", "ai có việc", "có job nào",
+        "em muốn tìm", "mình muốn tìm"
+    ]
+    if any(kw in text_lower for kw in applicant_keywords):
+        # Đề phòng ngoại lệ: nhà tuyển dụng dùng từ khóa (VD: "Tuyển dụng ứng viên cần tìm việc...")
+        if "tuyển" not in text_lower and "ứng viên" not in text_lower:
+            return False
+
+    # 2. Lọc bài spam: Bán hàng, thanh lý, tìm trọ, bóc phốt,...
+    spam_keywords = [
+        "thanh lý", "xả kho", "xả hàng", "pass đồ", "pass lại", "pass gấp",
+        "thu mua", "cầm đồ", "cho vay", "vay tín chấp",
+        "tìm trọ", "cho thuê phòng", "pass phòng", "nhượng phòng", "phòng trọ",
+        "bóc phốt", "cảnh báo lừa đảo", "lừa đảo"
+    ]
+    if any(kw in text_lower for kw in spam_keywords):
+        # Ngoại lệ: Bài tuyển dụng ghi "Cam kết không lừa đảo"
+        if not ("không lừa đảo" in text_lower or "cam kết" in text_lower):
+            return False
+
+    # 3. Phải chứa ít nhất 1 từ khóa phổ biến của việc làm
+    job_keywords = ["tuyển", "cần người", "tìm người", "job", "lương", "ca làm", "parttime", "fulltime", "thu nhập", "nhân viên", "việc làm"]
+    if not any(kw in text_lower for kw in job_keywords):
+        return False
+
+    return True
+
 def parse_post_with_ai(raw_text, post_link, name_group, image_text=None):
+    # Rate Limiting: Delay nhỏ để tránh lỗi 429 Limit từ Gemini AI (Tối đa ~60 requests/phút)
+    time.sleep(1.5)
+    
     prompt = f"""
     Bạn là một trợ lý ảo thông minh chuyên phân tích dữ liệu tuyển dụng việc làm.
     Nhiệm vụ 1: Đọc nội dung chữ và GIÁ TRỊ TỪ THẺ IMG (nếu có). Nếu dữ liệu từ thẻ img tương tự hoặc trùng lặp với nội dung chữ, hãy bỏ qua phần trùng.
@@ -311,44 +355,11 @@ def scrape_single_group(driver, group_url, name_group, max_posts_to_scrape, proc
                 box = current_boxes[index]
 
                 raw_text = box.text.strip()
-                if len(raw_text) < 5: 
-                    continue
-                
-                clean_text = re.sub(r'\s+', '', raw_text)
-                short_fingerprint = clean_text[:20] 
-                
-                if short_fingerprint in processed_hashes:
-                    continue
-
-                found_new_post_on_screen = True
-                print(f"\n--- Đang xử lý Bài đăng thứ {len(scraped_jobs) + 1} của {name_group} ---")
-                
-                driver.execute_script("arguments[0].scrollIntoView({block: 'center', behavior: 'smooth'});", box)
-                time.sleep(1.5)
-                
-                see_more_btns = box.find_elements(By.XPATH, ".//*[contains(., 'Xem thêm') or contains(., 'See more')]")
-                if see_more_btns:
-                    try:
-                        driver.execute_script("arguments[0].click();", see_more_btns[-1])
-                        time.sleep(random.uniform(1.5, 2.5)) 
-                        
-                        fresh_boxes = driver.find_elements(By.XPATH, "//div[@data-ad-rendering-role='story_message' or @data-ad-comet-preview='message']")
-                        for fbox in fresh_boxes:
-                            fbox_text = fbox.text.strip()
-                            if re.sub(r'\s+', '', fbox_text).startswith(short_fingerprint):
-                                box = fbox  
-                                raw_text = fbox_text
-                                break
-                    except:
-                        pass
-                        
-                raw_text = raw_text.replace("… Xem thêm", "").replace("Xem thêm", "").replace("Ẩn bớt", "").strip()
-                preview_text = raw_text.replace('\n', ' ')[:60]
-                print(f"    [Đọc] '{preview_text}...'")
-
                 post_link = "N/A"
                 image_text = None
+                all_links = []
 
+                # Xử lý trích xuất Link và Image Text sớm hơn
                 try:
                     wrapper = box.find_element(By.XPATH, "./ancestor::div[position() <= 15]")
                     
@@ -361,7 +372,7 @@ def scrape_single_group(driver, group_url, name_group, max_posts_to_scrape, proc
                                 post_link = href.split('?')[0]
                                 break
                     
-                    # 2. LẤY NỘI DUNG TỪ THẺ IMG
+                    # 2. LẤY NỘI DUNG TỪ THẺ IMG SỚM NHẤT CÓ THỂ
                     imgs = wrapper.find_elements(By.TAG_NAME, "img")
                     candidate_texts = []
                     for img in imgs:
@@ -373,7 +384,6 @@ def scrape_single_group(driver, group_url, name_group, max_posts_to_scrape, proc
                         text_candidate = "".join([part for part in [alt, aria] if part])
                         if not text_candidate:
                             continue
-                        # Loại bỏ các mô tả không liên quan / quá ngắn
                         if len(text_candidate) < 30:
                             continue
                         size = img.size
@@ -384,12 +394,10 @@ def scrape_single_group(driver, group_url, name_group, max_posts_to_scrape, proc
                     if candidate_texts:
                         candidate_texts.sort(reverse=True, key=lambda item: item[0])
                         image_text = candidate_texts[0][1]
-                        # Nếu text này đã có trong raw_text thì không cần thêm
-                        if image_text and image_text in raw_text:
-                            image_text = None
                 except Exception:
                     pass
                 
+                # Logic Fallback Link nếu chưa tìm thấy
                 if post_link == "N/A":
                     try:
                         for a in all_links:
@@ -400,23 +408,81 @@ def scrape_single_group(driver, group_url, name_group, max_posts_to_scrape, proc
                     except:
                         pass
 
-                print(f"    + Link: {post_link[:40]}...")
+                # Fallback Logic: Nếu raw_text quá ngắn, ưu tiên đắp bằng image_text ngay tại đây
+                if len(raw_text) < 10 and image_text:
+                    raw_text = image_text
+                    image_text = None # Reset để AI không bị đọc trùng nội dung hai lần ở Prompt
+                
+                if len(raw_text) < 10: 
+                    continue
+                
+                clean_text = re.sub(r'\s+', '', raw_text)
+                preview_fingerprint = clean_text[:20] # Dùng để theo dõi box hiện tại sau khi bấm "Xem thêm"
+                post_hash = hashlib.md5(preview_fingerprint.encode('utf-8')).hexdigest()
+                
+                if post_hash in processed_hashes:
+                    continue
 
                 if post_link != "N/A" and post_link in processed_links:
-                    print("    [!] Đã cào link này ở nhóm trước. Bỏ qua.")
-                    processed_hashes.add(short_fingerprint)
+                    processed_hashes.add(post_hash)
+                    continue
+
+                if post_link == "N/A":
+                    preview_skip = raw_text.replace('\n', ' ')[:20]
+                    print(f"\n    [!] BỎ QUA ẨN DANH: '{preview_skip}...'")
+                    processed_hashes.add(post_hash) 
+                    continue
+
+                found_new_post_on_screen = True
+                print(f"\n--- Đang xử lý Bài đăng thứ {len(scraped_jobs) + 1} của {name_group} ---")
+                
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center', behavior: 'smooth'});", box)
+                time.sleep(1.5)
+                
+                # Bấm Xem thêm
+                see_more_btns = box.find_elements(By.XPATH, ".//*[contains(., 'Xem thêm') or contains(., 'See more')]")
+                if see_more_btns:
+                    try:
+                        driver.execute_script("arguments[0].click();", see_more_btns[-1])
+                        time.sleep(random.uniform(1.5, 2.5)) 
+                        
+                        fresh_boxes = driver.find_elements(By.XPATH, "//div[@data-ad-rendering-role='story_message' or @data-ad-comet-preview='message']")
+                        for fbox in fresh_boxes:
+                            fbox_text = fbox.text.strip()
+                            if re.sub(r'\s+', '', fbox_text).startswith(preview_fingerprint):
+                                box = fbox  
+                                raw_text = fbox_text
+                                break
+                    except:
+                        pass
+                        
+                raw_text = raw_text.replace("… Xem thêm", "").replace("Xem thêm", "").replace("Ẩn bớt", "").strip()
+                preview_text = raw_text.replace('\n', ' ')[:60]
+                print(f"    [Đọc] '{preview_text}...'")
+                print(f"    + Link: {post_link[:40]}...")
+
+                if image_text and image_text in raw_text:
+                    image_text = None
+
+                # Lọc Rác Trước Khi Đưa AI Đọc (Heuristic)
+                combined_check_text = raw_text + " " + (image_text or "")
+                if not is_potential_job_post(combined_check_text):
+                    print("    [!] BỎ QUA: Bị lọc từ sơ bộ (Không phải bài tuyển dụng hoặc là Rác/Spam).")
+                    processed_hashes.add(post_hash)
+                    if post_link != "N/A":
+                        processed_links.add(post_link)
                     continue
 
                 job_data = parse_post_with_ai(raw_text, post_link, name_group, image_text)
                 
                 if job_data == "INVALID":
-                    print("    [!] BỎ QUA: AI lọc rác (Không phải bài tuyển dụng).")
+                    print("    [!] BỎ QUA: AI xác nhận không phải bài tuyển dụng hợp lệ.")
                 elif job_data:
                     job_data.pop("is_valid_job_post", None)
                     scraped_jobs.append(job_data)
                     print(f"    [★] LƯU THÀNH CÔNG: {job_data.get('title')}")
 
-                processed_hashes.add(short_fingerprint)
+                processed_hashes.add(post_hash)
                 if post_link != "N/A":
                     processed_links.add(post_link)
                 
@@ -510,4 +576,4 @@ if __name__ == "__main__":
             df.to_csv(CSV_FILE_PATH, index=False, encoding='utf-8-sig')
             print(f"\n=> [HOÀN TẤT] Đã lưu tổng cộng {len(all_scraped_jobs)} công việc vào '{CSV_FILE_PATH}'!")
         else:
-            print("\n=> [THẤT BẠI] Không cào được công việc nào từ tất cả các nhóm.")                    
+            print("\n=> [THẤT BẠI] Không cào được công việc nào từ tất cả các nhóm.")

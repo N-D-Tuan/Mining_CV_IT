@@ -7,16 +7,18 @@ from dotenv import load_dotenv
 # ==========================================
 # 1. CẤU HÌNH HỆ THỐNG
 # ==========================================
-load_dotenv()
+current_dir = os.path.dirname(os.path.abspath(__file__))
+env_path = os.path.join(current_dir, '..', 'ingestion', '.env')
+load_dotenv(dotenv_path=env_path)
 
 CSV_FILE_PATH = "../ingestion/fb_parttime_jobs_raw.csv"
 
 # Database configuration
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "5432")
-DB_NAME = os.getenv("DB_NAME", "mining_jobs_db")
-DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "password")
+DB_HOST = os.getenv("DB_HOST")
+DB_PORT = os.getenv("DB_PORT")
+DB_NAME = os.getenv("DB_NAME")
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
 
 def get_db_connection():
     return psycopg2.connect(
@@ -157,6 +159,8 @@ def process_and_save_data():
                 
                 cursor.execute("SELECT id FROM jobs WHERE link = %s", (link,))
                 if cursor.fetchone():
+                    # Đã thêm dòng thông báo bài viết bị trùng lặp tại đây
+                    print(f"    [-] Bỏ qua (Đã tồn tại trong DB): {row['title']} - {link}")
                     skipped_count += 1
                     continue
 
