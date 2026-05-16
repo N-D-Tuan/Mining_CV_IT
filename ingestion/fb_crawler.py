@@ -161,7 +161,7 @@ def is_potential_job_post(text):
             return False
 
     # 3. Phải chứa ít nhất 1 từ khóa phổ biến của việc làm
-    job_keywords = ["tuyển", "cần người", "tìm người", "job", "lương", "ca làm", "parttime", "fulltime", "thu nhập", "nhân viên", "việc làm"]
+    job_keywords = ["tuyển", "cần người", "tìm người", "job", "lương", "ca làm", "parttime", "fulltime", "thu nhập", "nhân viên", "việc làm", "phụ", "giúp"]
     if not any(kw in text_lower for kw in job_keywords):
         return False
 
@@ -280,8 +280,8 @@ def setup_facebook_session():
     driver = init_driver()
     login_success = False
     
-    for attempt in range(1, 4): 
-        print(f"\n[*] Mở Facebook (Lượt kiểm tra: {attempt}/3)...")
+    for attempt in range(1, 5): 
+        print(f"\n[*] Mở Facebook (Lượt kiểm tra: {attempt}/4)...")
         driver.get("https://www.facebook.com/")
         time.sleep(random.uniform(3, 5))
         
@@ -459,7 +459,7 @@ def scrape_single_group(driver, group_url, name_group, max_posts_to_scrape, proc
                 raw_text = raw_text.replace("… Xem thêm", "").replace("Xem thêm", "").replace("Ẩn bớt", "").strip()
                 preview_text = raw_text.replace('\n', ' ')[:60]
                 print(f"    [Đọc] '{preview_text}...'")
-                print(f"    + Link: {post_link[:40]}...")
+                print(f"    + Link: {post_link}")
 
                 if image_text and image_text in raw_text:
                     image_text = None
