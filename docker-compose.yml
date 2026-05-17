@@ -1,19 +1,60 @@
-version: '3.8'
+version: '3.9'
 
 services:
-  db:
-    image: postgres:15-alpine
+  postgres:
+    image: postgres:16
     container_name: mining_jobs_postgres
     restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password 
-      POSTGRES_DB: mining_jobs_db
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin123
+      POSTGRES_DB: jobs_db
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql 
+      - ./backend/app/scripts:/docker-entrypoint-initdb.d
+    networks:
+      - backend
+
+  api:
+    build:
+      context: ./backend/app
+      dockerfile: Dockerfile
+    container_name: job-api
+    restart: always
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/app/.env
+    volumes:
+      - ./backend/app:/app
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - backend
+    command: >
+      uvicorn main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+  
+  redis:
+    image: redis:7
+    container_name: job-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
 
 volumes:
   postgres_data:
+  redis_data:
