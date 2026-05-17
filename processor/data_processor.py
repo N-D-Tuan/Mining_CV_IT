@@ -2,6 +2,7 @@ import os
 import re
 import pandas as pd
 import psycopg2
+import redis
 from dotenv import load_dotenv
 
 # ==========================================
@@ -20,6 +21,9 @@ DB_NAME = os.getenv("DB_NAME")
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 
+REDIS_HOST = os.getenv("REDIS_HOST")
+REDIS_PORT = int(os.getenv("REDIS_PORT"))
+
 def get_db_connection():
     return psycopg2.connect(
         host=DB_HOST,
@@ -28,6 +32,10 @@ def get_db_connection():
         user=DB_USER,
         password=DB_PASSWORD
     )
+
+def get_redis_connection():
+    # Kết nối đến container 'job-redis' của bạn
+    return redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0, decode_responses=True)
 
 # ==========================================
 # 2. CÁC HÀM LÀM SẠCH DỮ LIỆU (DATA CLEANING)
@@ -146,9 +154,11 @@ def process_and_save_data():
     df = df.where(pd.notnull(df), None)
 
     # ---------------------------------------------------------
-    # BƯỚC 2: KẾT NỐI DB VÀ LƯU DỮ LIỆU
+    # BƯỚC 2: KẾT NỐI DB, REDIS VÀ LƯU DỮ LIỆU
     # ---------------------------------------------------------
+
     conn = get_db_connection()
+    redis_client = get_redis_connection() # Khởi tạo kết nối Redis
     inserted_count = 0
     skipped_count = 0
 
@@ -159,12 +169,10 @@ def process_and_save_data():
                 
                 cursor.execute("SELECT id FROM jobs WHERE link = %s", (link,))
                 if cursor.fetchone():
-                    # Đã thêm dòng thông báo bài viết bị trùng lặp tại đây
                     print(f"    [-] Bỏ qua (Đã tồn tại trong DB): {row['title']} - {link}")
                     skipped_count += 1
                     continue
 
-                # 🛡️ Lớp bảo vệ cuối cùng: Tước bỏ mọi thuộc tính Numpy trước khi chèn
                 final_min_sal = int(row['min_salary']) if row['min_salary'] is not None else None
                 final_max_sal = int(row['max_salary']) if row['max_salary'] is not None else None
 
@@ -175,7 +183,7 @@ def process_and_save_data():
                         requirements, post_content, link, source
                     ) VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                    )
+                    ) RETURNING id
                 """, (
                     row['title'], row['employer_name'], row['raw_salary'],
                     final_min_sal, final_max_sal, row['salary_type'],
@@ -184,22 +192,43 @@ def process_and_save_data():
                     row['post_content'], link, row['source']
                 ))
                 
+                # Lấy ID của công việc vừa được lưu vào Postgres
+                new_job_id = cursor.fetchone()[0]
                 inserted_count += 1
-            
+
+                # ==========================================
+                # THÊM MỚI: BẮN EVENT LÊN REDIS STREAM
+                # ==========================================
+                try:
+                    event_data = {
+                        'job_id': str(new_job_id),
+                        'title': str(row['title']) if pd.notna(row['title']) else 'Không có tiêu đề',
+                        'employer': str(row['employer_name']) if pd.notna(row['employer_name']) else 'Ẩn danh',
+                        'source': str(row['source']) if pd.notna(row['source']) else 'Unknown'
+                    }
+                    
+                    # 'new_jobs_stream' là tên của dòng chảy sự kiện.
+                    redis_client.xadd('new_jobs_stream', event_data, '*')
+                    print(f"    [>] Đã bắn tin lên Redis Stream: {row['title']}")
+                except Exception as redis_err:
+                    print(f"    [!] Lỗi khi bắn tin Redis (Job vẫn được lưu DB): {redis_err}")
+                # ==========================================
+
             conn.commit()
             
             print(f"\n{'='*40}")
-            print(" BÁO CÁO NHẬP DỮ LIỆU (DATABASE)")
+            print(" BÁO CÁO NHẬP DỮ LIỆU (DATABASE & REDIS)")
             print(f"{'='*40}")
-            print(f"[✓] Đã lưu mới: {inserted_count} công việc.")
+            print(f"[✓] Đã lưu mới và báo cáo Redis: {inserted_count} công việc.")
             if skipped_count > 0:
                 print(f"[-] Đã bỏ qua: {skipped_count} công việc (Đã tồn tại link trong DB).")
                 
     except Exception as e:
         conn.rollback()
-        print(f"[!] Lỗi cơ sở dữ liệu: {e}")
+        print(f"Lỗi cơ sở dữ liệu: {e}")
     finally:
-        conn.close()       
+        conn.close()
+        redis_client.close() # Nhớ đóng kết nối Redis      
 
 if __name__ == "__main__":
     process_and_save_data()
