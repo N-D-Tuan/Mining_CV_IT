@@ -47,36 +47,27 @@ async def consume_stream():
 
             if messages:
                 for stream, message_list in messages:
-                    group_counts = {}
-                    
+                    # Duyệt qua từng tin nhắn nhận được từ Redis
                     for message_id, job_data in message_list:
-                        group_name = job_data.get('source', 'Group ẩn danh')
-                        
-                        # Cộng dồn số lượng bài đăng của group đó
-                        if group_name not in group_counts:
-                            group_counts[group_name] = 0
-                        group_counts[group_name] += 1
+                        title = job_data.get('title', 'Không có tiêu đề')
+                        job_id = job_data.get('job_id')
                     
-                    print("")
-                    for group_name, count in group_counts.items():
-                        msg_text = f"Đã phát hiện {count} bài đăng tuyển việc làm mới ở group {group_name}!"
-                        print(f"✨ [THÔNG BÁO] {msg_text}")
+                        # 1. In ra màn hình Terminal của Backend
+                        print(f"✨ [THÔNG BÁO] Đã phát hiện job mới với tiêu đề '{title}'!")
 
-                        # =======================================================
-                        # GỬI QUA WEBSOCKET CHO TOÀN BỘ TRÌNH DUYỆT ĐANG ONLINE
-                        # =======================================================
+                        # 2. Bắn thông báo qua WebSocket cho Frontend
+                        # Cần dùng await vì đây là hàm bất đồng bộ (async)
                         await notifier.broadcast({
                             "type": "NEW_JOB_ALERT",
-                            "group_name": group_name,
-                            "count": count,
-                            "message": msg_text
+                            "job_id": job_id, 
+                            "title": title
                         })
                     
-                    for message_id, job_data in message_list:
+                        # 3. Báo cho Redis biết là đã xử lý xong tin nhắn này (ACK)
                         await redis_client.xack(STREAM_NAME, GROUP_NAME, message_id)
                         
             # Nghỉ một nhịp nhỏ để giảm tải cho CPU
-            await asyncio.sleep(1)
+            await asyncio.sleep(2)
             
     except asyncio.CancelledError:
         logger.info("[Redis] Đang dọn dẹp và ngắt tiến trình chạy ngầm Redis...")
