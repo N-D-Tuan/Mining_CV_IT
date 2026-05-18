@@ -6,7 +6,7 @@ from jose import JWTError, jwt
 from core.config import settings
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 300
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 

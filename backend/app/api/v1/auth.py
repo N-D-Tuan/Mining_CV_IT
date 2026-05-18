@@ -55,6 +55,7 @@ async def register(
         raise HTTPException(status_code=400, detail="Email đã được sử dụng")
  
     user = User(
+        user_name=payload.name,
         email=payload.email,
         password_hash=hash_password(payload.password),
     )
@@ -66,7 +67,7 @@ async def register(
  
     return ApiResponse(
         message="Đăng ký thành công",
-        data={"id": user.id, "email": user.email},
+        data={"id": user.id, "email": user.email, "user_name": user.user_name},
     )
 
 @router.post("/login")
@@ -86,7 +87,8 @@ async def login(
         data={
             "id": user.id,
             "email": user.email,
-            "created_at": to_vn_time(user.created_at), # UTC + 7 | to_vn_time viết ở core/timezone.py
+            "user_name": user.user_name,
+            "created_at": to_vn_time(user.created_at), # UTC + 7 | to_vn_time viết ở core/timezone.py
         },
     )
 
@@ -114,3 +116,37 @@ async def refresh_token(
     _set_auth_cookies(response, user.id)
  
     return ApiResponse(message="Token đã được làm mới")
+
+@router.post("/logout")
+async def logout(
+    response: Response,
+    access_token: str | None = Cookie(default=None),
+    refresh_token: str | None = Cookie(default=None),
+):
+    # Blacklist access_token vào Redis cho đến khi nó hết hạn tự nhiên
+    if access_token:
+        try:
+            await redis_client.set(
+                f"blacklist:{access_token}",
+                "1",
+                ex=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            )
+        except Exception:
+            pass  # Redis lỗi thì vẫn cho logout, chỉ xóa cookie
+ 
+    # Blacklist refresh_token
+    if refresh_token:
+        try:
+            await redis_client.set(
+                f"blacklist:{refresh_token}",
+                "1",
+                ex=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
+            )
+        except Exception:
+            pass
+ 
+    # Xóa cookie ở client
+    response.delete_cookie("access_token")
+    response.delete_cookie("refresh_token", path="/api/v1/auth/refresh-token")
+ 
+    return ApiResponse(message="Đăng xuất thành công")
