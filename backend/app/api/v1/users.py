@@ -178,6 +178,35 @@ async def unsave_job(
  
     return ApiResponse(message="Đã xóa job khỏi danh sách đã lưu")
 
+@router.get("/applied-jobs")
+async def get_applied_jobs(
+    cursor: Optional[int] = None,
+    limit: int = 20,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = (
+        select(Job)
+        .join(AppliedJob, AppliedJob.job_id == Job.id)
+        .where(AppliedJob.user_id == current_user.id)
+        .order_by(Job.id.desc())
+        .limit(limit + 1)
+    )
+    if cursor:
+        stmt = stmt.where(Job.id < cursor)
+ 
+    jobs = list(await db.scalars(stmt))
+    has_next = len(jobs) > limit
+    items = jobs[:limit]
+ 
+    return ApiResponse(
+        data={
+            "items": [JobResponse.model_validate(j) for j in items],
+            "next_cursor": items[-1].id if has_next else None,
+            "has_next": has_next,
+        }
+    )
+
 @router.post("/applied-jobs/{job_id}", status_code=status.HTTP_201_CREATED)
 async def apply_job(
     job_id: int,
