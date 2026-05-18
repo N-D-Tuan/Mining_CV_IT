@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager 
 import asyncio 
@@ -7,6 +7,7 @@ from api.router import api_router
 from core.config import settings
 from models.init import *
 from core.redis_worker import consume_stream
+from core.ws_manager import notifier
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -38,3 +39,13 @@ app.include_router(api_router, prefix="/api/v1")
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
+
+@app.websocket("/ws/notifications")
+async def websocket_endpoint(websocket: WebSocket):
+    await notifier.connect(websocket)
+    try:
+        while True:
+            # Lắng nghe nếu client có gửi gì lên (thường thì client chỉ nhận chứ ít gửi)
+            data = await websocket.receive_text()
+    except WebSocketDisconnect:
+        notifier.disconnect(websocket)
