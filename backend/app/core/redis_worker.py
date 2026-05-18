@@ -3,6 +3,7 @@ import logging
 import redis.asyncio as redis
 from redis.exceptions import ResponseError
 from core.config import settings
+from core.ws_manager import notifier
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -58,13 +59,24 @@ async def consume_stream():
                     
                     print("")
                     for group_name, count in group_counts.items():
-                        print(f"✨ [THÔNG BÁO] Đã phát hiện {count} bài đăng tuyển việc làm mới ở group {group_name}!")
+                        msg_text = f"Đã phát hiện {count} bài đăng tuyển việc làm mới ở group {group_name}!"
+                        print(f"✨ [THÔNG BÁO] {msg_text}")
+
+                        # =======================================================
+                        # GỬI QUA WEBSOCKET CHO TOÀN BỘ TRÌNH DUYỆT ĐANG ONLINE
+                        # =======================================================
+                        await notifier.broadcast({
+                            "type": "NEW_JOB_ALERT",
+                            "group_name": group_name,
+                            "count": count,
+                            "message": msg_text
+                        })
                     
                     for message_id, job_data in message_list:
                         await redis_client.xack(STREAM_NAME, GROUP_NAME, message_id)
                         
             # Nghỉ một nhịp nhỏ để giảm tải cho CPU
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(1)
             
     except asyncio.CancelledError:
         logger.info("[Redis] Đang dọn dẹp và ngắt tiến trình chạy ngầm Redis...")

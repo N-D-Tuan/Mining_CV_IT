@@ -137,7 +137,12 @@ def is_potential_job_post(text):
     """
     text_lower = text.lower()
 
-    # 1. Lọc các bài đăng của ứng viên tự tìm việc
+    # 1. Phải chứa ít nhất 1 từ khóa phổ biến của việc làm
+    job_keywords = ["tuyển", "cần người", "tìm người", "job", "lương", "ca làm", "parttime", "fulltime", "thu nhập", "nhân viên", "việc làm", "phụ", "giúp", "k/ca", "k/h", "bao ăn", "bưng bê", "chạy bàn", "đứng quầy", "xoay ca"]
+    if not any(kw in text_lower for kw in job_keywords):
+        return False
+    
+    # 2. Lọc các bài đăng của ứng viên tự tìm việc
     applicant_keywords = [
         "em cần tìm", "mình cần tìm", "em tìm việc", "mình tìm việc", "cần tìm việc",
         "tìm việc part", "có việc gì", "ai có việc", "có job nào",
@@ -148,7 +153,7 @@ def is_potential_job_post(text):
         if "tuyển" not in text_lower and "ứng viên" not in text_lower:
             return False
 
-    # 2. Lọc bài spam: Bán hàng, thanh lý, tìm trọ, bóc phốt,...
+    # 3. Lọc bài spam: Bán hàng, thanh lý, tìm trọ, bóc phốt,...
     spam_keywords = [
         "thanh lý", "xả kho", "xả hàng", "pass đồ", "pass lại", "pass gấp",
         "thu mua", "cầm đồ", "cho vay", "vay tín chấp",
@@ -158,12 +163,7 @@ def is_potential_job_post(text):
     if any(kw in text_lower for kw in spam_keywords):
         # Ngoại lệ: Bài tuyển dụng ghi "Cam kết không lừa đảo"
         if not ("không lừa đảo" in text_lower or "cam kết" in text_lower):
-            return False
-
-    # 3. Phải chứa ít nhất 1 từ khóa phổ biến của việc làm
-    job_keywords = ["tuyển", "cần người", "tìm người", "job", "lương", "ca làm", "parttime", "fulltime", "thu nhập", "nhân viên", "việc làm", "phụ", "giúp"]
-    if not any(kw in text_lower for kw in job_keywords):
-        return False
+            return False 
 
     return True
 
@@ -413,8 +413,8 @@ def scrape_single_group(driver, group_url, name_group, max_posts_to_scrape, proc
                     raw_text = image_text
                     image_text = None # Reset để AI không bị đọc trùng nội dung hai lần ở Prompt
                 
-                if len(raw_text) < 10: 
-                    continue
+                # if len(raw_text) < 10: 
+                #     continue
                 
                 clean_text = re.sub(r'\s+', '', raw_text)
                 preview_fingerprint = clean_text[:20] # Dùng để theo dõi box hiện tại sau khi bấm "Xem thêm"
