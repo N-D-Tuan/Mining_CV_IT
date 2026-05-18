@@ -1,14 +1,15 @@
-import logo from './logo.svg';
+import React, { useState } from 'react';
 import './App.css';
 import { UserContext } from './UserContext';
 import Header from './component/Layouts/Header';
 import Footer from './component/Layouts/Footer';
-import { Outlet, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 
 function App(props) {
+  const [user, setUser] = useState(null);
   let params1 = useLocation();
   return (
-    <UserContext.Provider>
+    <UserContext.Provider value={{ user, setUser }}>
       {
         params1['pathname'].includes("login") ? '' : <Header />
       }

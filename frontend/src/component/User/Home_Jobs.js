@@ -1,6 +1,111 @@
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { Bookmark } from "lucide-react";
+
+const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:8000";
 
 export default function Home_Jobs() {
+    const [jobs, setJobs] = useState([]);
+    const [loadingJobs, setLoadingJobs] = useState(false);
+    const [jobsError, setJobsError] = useState(null);
+    const [savedJobIds, setSavedJobIds] = useState(new Set());
+    const [heroSearchText, setHeroSearchText] = useState("");
+    const [heroCityText, setHeroCityText] = useState("");
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        fetchJobs();
+        fetchSavedJobs();
+    }, []);
+
+    async function fetchJobs() {
+        setLoadingJobs(true);
+        setJobsError(null);
+        try {
+            const res = await fetch(`${API_BASE}/api/v1/jobs?limit=6`);
+            const data = await res.json();
+            if (!res.ok) {
+                setJobsError(data.detail || data.message || "Không tải được danh sách việc làm");
+                setJobs([]);
+            } else {
+                setJobs(data.data?.items || []);
+            }
+        } catch (err) {
+            setJobsError("Không tải được việc làm. Vui lòng thử lại sau.");
+            setJobs([]);
+        } finally {
+            setLoadingJobs(false);
+        }
+    }
+
+    async function fetchSavedJobs() {
+        try {
+            const res = await fetch(`${API_BASE}/api/v1/users/saved-jobs?limit=100`, {
+                credentials: "include",
+            });
+            const data = await res.json();
+            if (!res.ok) return;
+            const ids = (data.data?.items || []).map((job) => job.id);
+            setSavedJobIds(new Set(ids));
+        } catch (err) {
+            // ignore saved job loading failures
+        }
+    }
+
+    function formatSalary(job) {
+        if (job.min_salary != null && job.max_salary != null) {
+            return `${job.min_salary.toLocaleString('vi-VN')}đ - ${job.max_salary.toLocaleString('vi-VN')}đ`;
+        }
+        if (job.min_salary != null) {
+            return `${job.min_salary.toLocaleString('vi-VN')}đ`;
+        }
+        if (job.max_salary != null) {
+            return `${job.max_salary.toLocaleString('vi-VN')}đ`;
+        }
+        return "...";
+    }
+
+    function formatLocation(job) {
+        return job.city || job.address || "Không rõ địa điểm";
+    }
+
+    function formatType(job) {
+        return job.job_type || "Part-time";
+    }
+
+    function formatSource(job) {
+        return job.employer_name || job.source || "Nhà tuyển dụng";
+    }
+
+    function formatPostedTime(job) {
+        if (!job.created_at) return "Mới đăng";
+        const date = new Date(job.created_at);
+        return date.toLocaleDateString('vi-VN');
+    }
+
+    const jobCategories = [
+        {
+            id: 1,
+            icon: "restaurant",
+            title: "Phục vụ",
+        },
+        {
+            id: 2,
+            icon: "shopping_cart",
+            title: "Bán hàng",
+        },
+        {
+            id: 3,
+            icon: "history_edu",
+            title: "Gia sư",
+        },
+        {
+            id: 4,
+            icon: "person_apron",
+            title: "Freelancer",
+        },
+    ];
+
     return (
         <>
             <main class="max-w-container-max mx-auto px-gutter py-xl">
@@ -24,7 +129,7 @@ export default function Home_Jobs() {
                                 <input class="w-full border-none focus:ring-0 text-body-md bg-transparent" placeholder="Ở đâu?"
                                     type="text" />
                             </div>
-                            <Link to="/search" class="w-full md:w-auto">
+                            <Link to="/jobs" class="w-full md:w-auto">
                                 <button
                                     class="bg-primary-container text-on-primary-container font-label-md text-label-md px-2xl py-md rounded-xl hover:opacity-90 transition-all w-full md:w-auto">Tìm
                                     kiếm</button>
@@ -76,141 +181,100 @@ export default function Home_Jobs() {
                                 <h2 class="font-headline-lg text-headline-lg">Danh mục việc làm</h2>
                                 <a class="text-primary font-label-md hover:underline" href="#">Xem tất cả</a>
                             </div>
-                            <div class="grid grid-cols-2 md:grid-cols-4 gap-md">
-                                <div
-                                    class="bg-surface-container-lowest p-lg rounded-xl job-card-shadow text-center hover:bg-primary-fixed transition-colors cursor-pointer group">
-                                    <span
-                                        class="material-symbols-outlined text-primary mb-sm block text-3xl group-hover:scale-110 transition-transform">restaurant</span>
-                                    <span class="font-label-md">Phục vụ</span>
-                                </div>
-                                <div
-                                    class="bg-surface-container-lowest p-lg rounded-xl job-card-shadow text-center hover:bg-primary-fixed transition-colors cursor-pointer group">
-                                    <span
-                                        class="material-symbols-outlined text-primary mb-sm block text-3xl group-hover:scale-110 transition-transform">shopping_cart</span>
-                                    <span class="font-label-md">Bán hàng</span>
-                                </div>
-                                <div
-                                    class="bg-surface-container-lowest p-lg rounded-xl job-card-shadow text-center hover:bg-primary-fixed transition-colors cursor-pointer group">
-                                    <span
-                                        class="material-symbols-outlined text-primary mb-sm block text-3xl group-hover:scale-110 transition-transform">history_edu</span>
-                                    <span class="font-label-md">Gia sư</span>
-                                </div>
-                                <div
-                                    class="bg-surface-container-lowest p-lg rounded-xl job-card-shadow text-center hover:bg-primary-fixed transition-colors cursor-pointer group">
-                                    <span
-                                        class="material-symbols-outlined text-primary mb-sm block text-3xl group-hover:scale-110 transition-transform">person_apron</span>
-                                    <span class="font-label-md">Freelancer</span>
-                                </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-md">
+                                {jobCategories.map((item) => (
+                                    <div
+                                        key={item.id}
+                                        className="
+        bg-surface-container-lowest
+        p-lg
+        rounded-xl
+        border border-outline-variant
+        job-card-shadow
+        text-center
+        hover:bg-primary-fixed
+        hover:border-primary
+        transition-all
+        duration-300
+        cursor-pointer
+        group
+      "
+                                    >
+                                        <span
+                                            className="
+                                                material-symbols-outlined
+                                                text-primary
+                                                mb-sm
+                                                block
+                                                text-3xl
+                                                group-hover:scale-110
+                                                transition-transform
+                                                "
+                                        >
+                                            {item.icon}
+                                        </span>
+
+                                        <span className="font-label-md">
+                                            {item.title}
+                                        </span>
+                                    </div>
+                                ))}
                             </div>
                         </section>
                         {/* <!-- Section 2: New Jobs Today --> */}
                         <section>
                             <div class="flex justify-between items-end mb-lg">
                                 <h2 class="font-headline-lg text-headline-lg">Job mới hôm nay</h2>
-                                <span
-                                    class="text-on-surface-variant text-body-sm bg-surface-container-high px-md py-1 rounded-full">32
-                                    tin mới</span>
+                                <Link to="/jobs" >
+                                    <span class="text-on-surface-variant text-body-sm bg-surface-container-high px-md py-1 rounded-full">
+                                        {loadingJobs ? 'Đang tải...' : `Xem tất cả`}
+                                    </span>
+                                </Link>
+
                             </div>
-                            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-lg">
-                                {/* <!-- Job Card 1 --> */}
-                                <article
-                                    class="bg-surface-container-lowest p-md rounded-xl job-card-shadow job-card-hover transition-all duration-200 border border-outline-variant flex flex-col h-full group">
-                                    <div class="flex justify-between items-start mb-md">
-                                        <img alt="The Coffee House"
-                                            class="w-12 h-12 rounded-lg object-contain bg-surface-container"
-                                            src="https://lh3.googleusercontent.com/aida-public/AB6AXuCKTKIbxbfJ5UiJI8ow3tAABc8mVp2Z6SRfttkckdxU4xrfpi84EosapDxAf1RqG_dMINgl2QRW6uPCxWbF4Qq9Bu1rtcnC7Hn6l6LAWi-XTMg7xEIiN7jOFTHqrsichVDNFO8Q_D8iYtUrDh-d4O4jzu7sGhGx2MSMTdKF45FQSRdzOw8KJpUomkIYMfKQWp7vMHJKFtJKzWb0NWtOY6I33ryCtH4c9HctJY5OIXNsvsQaUXK7Qu5j5jv2tWrVQ7P68FUnUFqDMNUt" />
-                                        <button
-                                            class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">bookmark</button>
+                            {jobsError && (
+                                <div class="rounded-xl bg-surface-container-lowest border border-red-200 text-red-700 p-md mb-lg">
+                                    {jobsError}
+                                </div>
+                            )}
+                            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-lg">
+                                {loadingJobs && !jobs.length ? (
+                                    <div class="col-span-1 md:col-span-2 xl:col-span-3 p-lg rounded-xl bg-surface-container-lowest border border-outline-variant text-center text-on-surface-variant">
+                                        Đang tải danh sách việc làm...
                                     </div>
-                                    <h3
-                                        class="font-headline-sm text-headline-sm mb-xs group-hover:text-primary transition-colors">
-                                        Nhân viên phục vụ</h3>
-                                    <p class="text-on-surface-variant text-body-sm mb-md">The Coffee House • Quận 1</p>
-                                    <div class="mt-auto">
-                                        <div class="text-primary font-bold text-headline-sm mb-sm">25.000đ/giờ</div>
-                                        <div class="flex justify-between items-center text-on-surface-variant text-body-sm">
-                                            <span class="flex items-center gap-1"><span
-                                                class="material-symbols-outlined text-[16px]">schedule</span> 2 giờ
-                                                trước</span>
-                                            <span
-                                                class="bg-secondary-container px-sm py-[2px] rounded text-on-secondary-container text-label-sm">Part-time</span>
-                                        </div>
+                                ) : jobs.length === 0 ? (
+                                    <div class="col-span-1 md:col-span-2 xl:col-span-3 p-lg rounded-xl bg-surface-container-lowest border border-outline-variant text-center text-on-surface-variant">
+                                        Không có việc làm phù hợp.
                                     </div>
-                                </article>
-                                {/* <!-- Job Card 2 --> */}
-                                <article
-                                    class="bg-surface-container-lowest p-md rounded-xl job-card-shadow job-card-hover transition-all duration-200 border border-outline-variant flex flex-col h-full group">
-                                    <div class="flex justify-between items-start mb-md">
-                                        <img alt="Design Studio"
-                                            class="w-12 h-12 rounded-lg object-contain bg-surface-container"
-                                            src="https://lh3.googleusercontent.com/aida-public/AB6AXuCTY6Y5jH3TQGo_tt78Gyov8dgaHW3G-WtzJu-KUKz6ItFA3qpNCfmjzVWQNwNMqfPh075FfPCt9XtX_qLhXmX_St5UJMsfTE2Ga0m8yCMmpmWmzzWsBRIlgae8ZuEap0j1FXH7-IDfI4BzGboOyTWbsbul7fteNOFoniNT7sweTWF0n3-5fqC9T2dKa_NHpqij3WWV5bKb0uBi6U00nFR8DGXDcSiHjfDnFWrQ8RNnlv3Y4vUq7yMEZSw5mVNVvhdYluQyHVxorQYj" />
-                                        <button
-                                            class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">bookmark</button>
-                                    </div>
-                                    <h3
-                                        class="font-headline-sm text-headline-sm mb-xs group-hover:text-primary transition-colors">
-                                        Graphic Designer Junior</h3>
-                                    <p class="text-on-surface-variant text-body-sm mb-md">Lumina Studio • Freelance</p>
-                                    <div class="mt-auto">
-                                        <div class="text-primary font-bold text-headline-sm mb-sm">5 - 7 Tr/tháng</div>
-                                        <div class="flex justify-between items-center text-on-surface-variant text-body-sm">
-                                            <span class="flex items-center gap-1"><span
-                                                class="material-symbols-outlined text-[16px]">schedule</span> 5 giờ
-                                                trước</span>
-                                            <span
-                                                class="bg-secondary-container px-sm py-[2px] rounded text-on-secondary-container text-label-sm">Remote</span>
-                                        </div>
-                                    </div>
-                                </article>
-                                {/* <!-- Job Card 3 --> */}
-                                <article
-                                    class="bg-surface-container-lowest p-md rounded-xl job-card-shadow job-card-hover transition-all duration-200 border border-outline-variant flex flex-col h-full group">
-                                    <div class="flex justify-between items-start mb-md">
-                                        <img alt="EduCenter" class="w-12 h-12 rounded-lg object-contain bg-surface-container"
-                                            src="https://lh3.googleusercontent.com/aida-public/AB6AXuDlAQy_hM9Ecr7_6gZcuiuxKsqwdjGbcdVB38S9RxC-_Read4fD8QcHQKbw8yVFWakazRXFUAECRb3fGSydaFZNmGvzN2onv0026lMCZxDnVXIRhFFubdrWWgTinrH-bzejvaNtw4uCVfypp-9KC3Tj6kN9Itq6UDXoC_tmZPDjPvIFgFSPIDWuZ0t5JlsuBOCLQa4-sf2Vn_XyrrlKNvsYj4hR1yJYwUTQxkeIapbGBs7DNtboTFETgGdAu6y7tZQypzJ5pFefx2EB" />
-                                        <button
-                                            class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">bookmark</button>
-                                    </div>
-                                    <h3
-                                        class="font-headline-sm text-headline-sm mb-xs group-hover:text-primary transition-colors">
-                                        Gia sư Tiếng Anh</h3>
-                                    <p class="text-on-surface-variant text-body-sm mb-md">VUS Center • Quận 7</p>
-                                    <div class="mt-auto">
-                                        <div class="text-primary font-bold text-headline-sm mb-sm">150.000đ/buổi</div>
-                                        <div class="flex justify-between items-center text-on-surface-variant text-body-sm">
-                                            <span class="flex items-center gap-1"><span
-                                                class="material-symbols-outlined text-[16px]">schedule</span> 8 giờ
-                                                trước</span>
-                                            <span
-                                                class="bg-secondary-container px-sm py-[2px] rounded text-on-secondary-container text-label-sm">Part-time</span>
-                                        </div>
-                                    </div>
-                                </article>
-                                {/* <!-- Job Card 4 --> */}
-                                <article
-                                    class="bg-surface-container-lowest p-md rounded-xl job-card-shadow job-card-hover transition-all duration-200 border border-outline-variant flex flex-col h-full group">
-                                    <div class="flex justify-between items-start mb-md">
-                                        <img alt="Giao Hang" class="w-12 h-12 rounded-lg object-contain bg-surface-container"
-                                            src="https://lh3.googleusercontent.com/aida-public/AB6AXuCowBLHuU4--dCb4XeQ38i4XsNiMWL5FOfxITHfwyiaZ1xJmNa7KJ6SjQ_-qsb3xTKBpMXszsvALjMQUNMTKNJXTkcJdo2mqEKY8ehcSw9DuImg4LGGhQJ_LmpPs3q5rG4byjO_1ukJ6h0yTKaq154plWmqmN1kayM5-xzxjhhEqwCeUEM6jewjxEDYllgZVnHDmEtouCBGph3XjRutiFr6LKXw9XHP1GLp6omQnCg69rHOwRIM0IaoXEKI3u_lHnzeDu7O7XOykx-d" />
-                                        <button
-                                            class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">bookmark</button>
-                                    </div>
-                                    <h3
-                                        class="font-headline-sm text-headline-sm mb-xs group-hover:text-primary transition-colors">
-                                        Nhân viên kho</h3>
-                                    <p class="text-on-surface-variant text-body-sm mb-md">Shopee Express • Thủ Đức</p>
-                                    <div class="mt-auto">
-                                        <div class="text-primary font-bold text-headline-sm mb-sm">28.000đ/giờ</div>
-                                        <div class="flex justify-between items-center text-on-surface-variant text-body-sm">
-                                            <span class="flex items-center gap-1"><span
-                                                class="material-symbols-outlined text-[16px]">schedule</span> 12 giờ
-                                                trước</span>
-                                            <span
-                                                class="bg-secondary-container px-sm py-[2px] rounded text-on-secondary-container text-label-sm">Ca
-                                                tối</span>
-                                        </div>
-                                    </div>
-                                </article>
+                                ) : (
+                                    jobs.map((job) => (
+                                        <Link key={job.id} to={`/jobs/${job.id}`} class="bg-surface-container-lowest p-md rounded-xl job-card-shadow job-card-hover transition-all duration-200 border border-outline-variant flex flex-col h-full group no-underline">
+                                            <div class="flex gap-2 items-start mb-md">
+                                                <div class="flex items-center gap-sm flex-1">
+                                                    <div>
+                                                        <h3 class="font-headline-sm text-headline-sm mb-xs group-hover:text-primary transition-colors job-card-title-clamp-2">
+                                                            {job.title || 'Không rõ tên vị trí'}</h3>
+                                                        <p class="text-on-surface-variant text-body-sm job-card-meta-clamp-2">
+                                                            {formatSource(job)} • {formatLocation(job)}</p>
+                                                    </div>
+                                                </div>
+                                                <Bookmark
+                                                    className={`w-5 h-5 transition-colors ${savedJobIds.has(job.id) ? 'text-primary' : 'text-on-surface-variant'}`}
+                                                    fill={savedJobIds.has(job.id) ? 'currentColor' : 'none'}
+                                                />
+                                            </div>
+                                            <div class="mt-auto">
+                                                <div class="text-primary font-bold text-headline-sm mb-sm">{formatSalary(job)}</div>
+                                                <div class="flex justify-between items-center text-on-surface-variant text-body-sm">
+                                                    <span class="flex items-center gap-1"><span
+                                                        class="material-symbols-outlined text-[16px]">schedule</span> {formatPostedTime(job)}</span>
+                                                    <span
+                                                        class="bg-secondary-container px-sm py-[2px] rounded text-on-secondary-container text-label-sm">{formatType(job)}</span>
+                                                </div>
+                                            </div>
+                                        </Link>
+                                    ))
+                                )}
                             </div>
                         </section>
                         {/* <!-- Section 3: Personalized Matches --> */}

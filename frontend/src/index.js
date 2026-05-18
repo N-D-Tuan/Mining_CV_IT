@@ -9,6 +9,8 @@ import Search_UI from './component/User/Search_UI';
 import Home_Jobs from './component/User/Home_Jobs';
 import Profile from './component/User/Profile';
 import Login from './component/Auth/Login';
+import Update_Profile from './component/User/Update_Profile';
+import Job_Detail from './component/User/Job_Detail';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
@@ -17,10 +19,12 @@ root.render(
       <App>
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/search" element={<Search_UI />} />
+          <Route path="/jobs" element={<Search_UI />} />
           <Route path="/browse" element={<Home_Jobs />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/update-profile" element={<Update_Profile />} />
+          <Route path="/jobs/:id" element={<Job_Detail />} />
         </Routes>
       </App>
     </BrowserRouter>

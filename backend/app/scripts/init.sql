@@ -1,5 +1,6 @@
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
+    user_name VARCHAR(255),          -- Tên người dùng (Có thể là tên thật hoặc nickname)
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -7,6 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS user_profiles (
     user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    user_name VARCHAR(255),          -- Tên người dùng (Có thể là tên thật hoặc nickname)
     expected_salary INTEGER,      -- Mức lương mong muốn (Có thể là theo giờ hoặc theo tháng)
     city VARCHAR(100),            -- Thành phố hiện đang sinh sống 
     experience TEXT,              -- Kinh nghiệm (VD: "Đã làm phục vụ 6 tháng", "Chưa có kinh nghiệm")

@@ -40,6 +40,8 @@ async def get_profile(
     )
  
     data = {
+        "has_profile": profile is not None,
+        "user_name": current_user.user_name,
         "user_id": current_user.id,
         "email": current_user.email,
         "created_at": to_vn_time(current_user.created_at),
@@ -178,6 +180,20 @@ async def unsave_job(
  
     return ApiResponse(message="Đã xóa job khỏi danh sách đã lưu")
 
+@router.get("/saved-jobs/{job_id}")
+async def get_saved_job_status(
+    job_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    saved = await db.scalar(
+        select(SavedJob).where(
+            SavedJob.user_id == current_user.id,
+            SavedJob.job_id == job_id,
+        )
+    )
+    return ApiResponse(data={"saved": bool(saved)})
+
 @router.get("/applied-jobs")
 async def get_applied_jobs(
     cursor: Optional[int] = None,
@@ -230,6 +246,20 @@ async def apply_job(
     await db.commit()
  
     return ApiResponse(message="Ứng tuyển thành công")
+
+@router.get("/applied-jobs/{job_id}")
+async def get_applied_job_status(
+    job_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    applied = await db.scalar(
+        select(AppliedJob).where(
+            AppliedJob.user_id == current_user.id,
+            AppliedJob.job_id == job_id,
+        )
+    )
+    return ApiResponse(data={"applied": bool(applied)})
 
 @router.delete("/applied-jobs/{job_id}")
 async def unapply_job(
