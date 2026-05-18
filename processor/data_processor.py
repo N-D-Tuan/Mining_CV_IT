@@ -162,16 +162,34 @@ def process_and_save_data():
     inserted_count = 0
     skipped_count = 0
 
+    CACHE_KEY = "processed_job_links"
+
     try:
         with conn.cursor() as cursor:
             for index, row in df.iterrows():
                 link = row['link']
+
+                # ==========================================
+                # 1. KIỂM TRA TRONG REDIS CACHE TRƯỚC (Siêu nhanh)
+                # ==========================================
+                if redis_client.sismember(CACHE_KEY, link):
+                    print(f"    [-] Bỏ qua (Đã có trong Cache): {row['title']} - {link}")
+                    skipped_count += 1
+                    continue
                 
+                # ==========================================
+                # 2. NẾU CHƯA CÓ TRONG CACHE -> KIỂM TRA TRONG DB (Chậm hơn)
+                # ==========================================
                 cursor.execute("SELECT id FROM jobs WHERE link = %s", (link,))
                 if cursor.fetchone():
                     print(f"    [-] Bỏ qua (Đã tồn tại trong DB): {row['title']} - {link}")
                     skipped_count += 1
+                    redis_client.sadd(CACHE_KEY, link)
                     continue
+
+                # ==========================================
+                # 3. NẾU MỚI HOÀN TOÀN -> LƯU VÀO DB
+                # ==========================================
 
                 final_min_sal = int(row['min_salary']) if row['min_salary'] is not None else None
                 final_max_sal = int(row['max_salary']) if row['max_salary'] is not None else None
@@ -195,6 +213,9 @@ def process_and_save_data():
                 # Lấy ID của công việc vừa được lưu vào Postgres
                 new_job_id = cursor.fetchone()[0]
                 inserted_count += 1
+
+                # Cập nhật link mới vào Redis Cache
+                redis_client.sadd(CACHE_KEY, link)
 
                 # ==========================================
                 # THÊM MỚI: BẮN EVENT LÊN REDIS STREAM
