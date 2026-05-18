@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+
+<html class="light" lang="vi">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>JobFlow - Chi tiết công việc</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600;700&amp;display=swap"
+        rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet" />
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-fixed-dim": "#ffb596",
+                        "background": "#faf8ff",
+                        "tertiary-container": "#bc4800",
+                        "error": "#ba1a1a",
+                        "primary": "#004ac6",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container-highest": "#e1e2ed",
+                        "secondary-fixed": "#dae2fd",
+                        "on-primary": "#ffffff",
+                        "surface-container": "#ededf9",
+                        "on-background": "#191b23",
+                        "surface-variant": "#e1e2ed",
+                        "on-primary-container": "#eeefff",
+                        "on-primary-fixed-variant": "#003ea8",
+                        "outline-variant": "#c3c6d7",
+                        "on-tertiary-fixed": "#360f00",
+                        "inverse-on-surface": "#f0f0fb",
+                        "error-container": "#ffdad6",
+                        "on-error": "#ffffff",
+                        "on-secondary-container": "#5c647a",
+                        "on-tertiary-container": "#ffede6",
+                        "secondary-container": "#dae2fd",
+                        "on-secondary-fixed-variant": "#3f465c",
+                        "on-secondary-fixed": "#131b2e",
+                        "surface-container-low": "#f3f3fe",
+                        "on-surface": "#191b23",
+                        "primary-container": "#2563eb",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-fixed": "#00174b",
+                        "secondary": "#565e74",
+                        "outline": "#737686",
+                        "surface": "#faf8ff",
+                        "primary-fixed": "#dbe1ff",
+                        "primary-fixed-dim": "#b4c5ff",
+                        "on-secondary": "#ffffff",
+                        "surface-tint": "#0053db",
+                        "on-surface-variant": "#434655",
+                        "on-tertiary-fixed-variant": "#7d2d00",
+                        "inverse-primary": "#b4c5ff",
+                        "inverse-surface": "#2e3039",
+                        "on-error-container": "#93000a",
+                        "tertiary": "#943700",
+                        "tertiary-fixed": "#ffdbcd",
+                        "surface-bright": "#faf8ff",
+                        "secondary-fixed-dim": "#bec6e0",
+                        "surface-dim": "#d9d9e5",
+                        "surface-container-high": "#e7e7f3"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xs": "4px",
+                        "3xl": "64px",
+                        "container-max": "1280px",
+                        "base": "4px",
+                        "md": "16px",
+                        "sm": "8px",
+                        "xl": "32px",
+                        "lg": "24px",
+                        "2xl": "48px",
+                        "gutter": "24px"
+                    },
+                    "fontFamily": {
+                        "label-sm": ["Inter"],
+                        "body-md": ["Inter"],
+                        "label-md": ["Inter"],
+                        "display": ["Plus Jakarta Sans"],
+                        "headline-sm": ["Plus Jakarta Sans"],
+                        "headline-md": ["Plus Jakarta Sans"],
+                        "body-sm": ["Inter"],
+                        "headline-lg": ["Plus Jakarta Sans"],
+                        "body-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "label-sm": ["12px", { "lineHeight": "1.2", "fontWeight": "500" }],
+                        "body-md": ["16px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "label-md": ["14px", { "lineHeight": "1.2", "letterSpacing": "0.05em", "fontWeight": "600" }],
+                        "display": ["48px", { "lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-sm": ["20px", { "lineHeight": "1.4", "fontWeight": "600" }],
+                        "headline-md": ["24px", { "lineHeight": "1.4", "fontWeight": "600" }],
+                        "body-sm": ["14px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "headline-lg": ["32px", { "lineHeight": "1.3", "fontWeight": "600" }],
+                        "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }]
+                    }
+                },
+            },
+        }
+    </script>
+    <style>
+        body {
+            background-color: #faf8ff;
+            color: #191b23;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        .sticky-sidebar {
+            top: 100px;
+            height: fit-content;
+        }
+    </style>
+</head>
+
+<body class="font-body-md text-body-md">
+    <!-- TopNavBar -->
+    <nav
+        class="bg-surface dark:bg-surface-dim border-b border-outline-variant dark:border-outline shadow-sm docked full-width top-0 sticky z-50">
+        <div class="flex justify-between items-center w-full px-gutter max-w-container-max mx-auto h-[64px]">
+            <div class="flex items-center gap-xl">
+                <span
+                    class="font-display text-headline-md font-bold text-primary dark:text-primary-fixed-dim">JobFlow</span>
+                <div class="hidden md:flex gap-lg">
+                    <a class="text-primary dark:text-primary-fixed-dim font-bold border-b-2 border-primary pb-1 font-headline-sm text-headline-sm"
+                        href="#">Browse</a>
+                    <a class="text-on-surface-variant dark:text-on-surface-variant font-medium hover:text-primary-container dark:hover:text-primary-fixed transition-all duration-200 font-headline-sm text-headline-sm"
+                        href="#">Saved</a>
+                    <a class="text-on-surface-variant dark:text-on-surface-variant font-medium hover:text-primary-container dark:hover:text-primary-fixed transition-all duration-200 font-headline-sm text-headline-sm"
+                        href="#">Dashboard</a>
+                    <a class="text-on-surface-variant dark:text-on-surface-variant font-medium hover:text-primary-container dark:hover:text-primary-fixed transition-all duration-200 font-headline-sm text-headline-sm"
+                        href="#">Profile</a>
+                </div>
+            </div>
+            <div class="flex items-center gap-md">
+                <button
+                    class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">notifications</button>
+                <button
+                    class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">settings</button>
+                <div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant">
+                    <img alt="User profile" class="w-full h-full object-cover"
+                        src="https://lh3.googleusercontent.com/aida-public/AB6AXuDuZSHskxcTM-jK2EYdtykiGoJBcJfc9_9GIs8kWSTompkkJksSmqe641gqKU7KHzJEPfL63fyotU20SXyoFW7AO-5MciwebnMfwl4fQPu19ZET5NeuCnqK4o4axbh1OVV-06un6rfV_yATUbugnN14jlH3mSBd1ZeSHBPX65bthoHF19AGtGUGlflYRtFbJC5mQOaDh8cHI_g6qAfNMxQUQAl9_jJsYxno6DV9ybmpxEciAJhz229OWR4cT5bZIha22bPd11P5Wg5B" />
+                </div>
+            </div>
+        </div>
+    </nav>
+    <main class="max-w-container-max mx-auto px-gutter py-xl">
+        <div class="flex flex-col lg:flex-row gap-xl">
+            <!-- Main Content (Left 70%) -->
+            <div class="w-full lg:w-[70%] space-y-lg">
+                <!-- Header Section -->
+                <header class="bg-surface-container-lowest p-xl rounded-xl shadow-sm border border-outline-variant">
+                    <div class="flex flex-col md:flex-row justify-between items-start gap-md">
+                        <div class="space-y-sm">
+                            <h1 class="font-display text-headline-lg font-bold text-on-surface">Chuyên viên Thiết kế
+                                UI/UX (Part-time)</h1>
+                            <div class="flex flex-wrap items-center gap-md text-on-surface-variant">
+                                <span class="flex items-center gap-xs"><span
+                                        class="material-symbols-outlined text-[18px]">business</span> Creative Studio
+                                    Co.</span>
+                                <span class="flex items-center gap-xs"><span
+                                        class="material-symbols-outlined text-[18px]">schedule</span> Đăng 2 giờ
+                                    trước</span>
+                                <span class="flex items-center gap-xs"><span
+                                        class="material-symbols-outlined text-[18px]">location_on</span> Quận 1, TP. Hồ
+                                    Chí Minh</span>
+                            </div>
+                        </div>
+                        <div
+                            class="bg-primary-container/10 text-primary-container px-md py-sm rounded-lg font-bold text-headline-sm">
+                            15tr - 20tr VNĐ
+                        </div>
+                    </div>
+                </header>
+                <!-- Navigation Tabs -->
+                <div class="flex border-b border-outline-variant gap-xl">
+                    <button
+                        class="pb-md border-b-2 border-primary text-primary font-bold font-label-md text-label-md">Mô tả
+                        công việc</button>
+                    <button
+                        class="pb-md text-on-surface-variant hover:text-primary transition-colors font-label-md text-label-md">Yêu
+                        cầu</button>
+                    <button
+                        class="pb-md text-on-surface-variant hover:text-primary transition-colors font-label-md text-label-md">Quyền
+                        lợi</button>
+                </div>
+                <!-- Job Details Sections -->
+                <article
+                    class="bg-surface-container-lowest p-xl rounded-xl shadow-sm border border-outline-variant space-y-xl">
+                    <section>
+                        <h2 class="font-display text-headline-sm font-bold text-on-surface mb-md">Mô tả công việc</h2>
+                        <p class="text-on-surface-variant leading-relaxed font-body-md text-body-md">
+                            Chúng tôi đang tìm kiếm một Chuyên viên Thiết kế UI/UX tài năng và nhiệt huyết để tham gia
+                            vào đội ngũ phát triển sản phẩm của Creative Studio Co. Bạn sẽ chịu trách nhiệm chính trong
+                            việc tối ưu hóa trải nghiệm người dùng cho các ứng dụng di động và website của khách hàng.
+                            Công việc đòi hỏi khả năng tư duy sáng tạo cao, hiểu biết sâu sắc về hành vi người dùng và
+                            kỹ năng sử dụng thành thạo các công cụ thiết kế hiện đại.
+                        </p>
+                    </section>
+                    <section>
+                        <h2 class="font-display text-headline-sm font-bold text-on-surface mb-md">Yêu cầu công việc</h2>
+                        <ul class="space-y-sm">
+                            <li class="flex items-start gap-sm text-on-surface-variant">
+                                <span class="material-symbols-outlined text-primary text-[20px]">check_circle</span>
+                                <span class="font-body-md text-body-md">Ít nhất 2 năm kinh nghiệm trong lĩnh vực thiết
+                                    kế UI/UX hoặc tương đương.</span>
+                            </li>
+                            <li class="flex items-start gap-sm text-on-surface-variant">
+                                <span class="material-symbols-outlined text-primary text-[20px]">check_circle</span>
+                                <span class="font-body-md text-body-md">Thành thạo Figma, Adobe XD, và Sketch. Có khả
+                                    năng tạo prototype nhanh.</span>
+                            </li>
+                            <li class="flex items-start gap-sm text-on-surface-variant">
+                                <span class="material-symbols-outlined text-primary text-[20px]">check_circle</span>
+                                <span class="font-body-md text-body-md">Hiểu biết về Design System, Grid System và
+                                    Responsive Design.</span>
+                            </li>
+                            <li class="flex items-start gap-sm text-on-surface-variant">
+                                <span class="material-symbols-outlined text-primary text-[20px]">check_circle</span>
+                                <span class="font-body-md text-body-md">Có khả năng làm việc độc lập và quản lý thời
+                                    gian tốt (đặc biệt cho vị trí part-time).</span>
+                            </li>
+                        </ul>
+                    </section>
+                    <section>
+                        <h2 class="font-display text-headline-sm font-bold text-on-surface mb-md">Quyền lợi</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-md">
+                            <div
+                                class="p-md bg-surface-container-low rounded-lg border border-outline-variant/30 flex items-center gap-md">
+                                <span
+                                    class="material-symbols-outlined text-primary bg-primary/10 p-sm rounded-full">payments</span>
+                                <span class="font-label-md text-label-md">Lương thưởng cạnh tranh</span>
+                            </div>
+                            <div
+                                class="p-md bg-surface-container-low rounded-lg border border-outline-variant/30 flex items-center gap-md">
+                                <span
+                                    class="material-symbols-outlined text-primary bg-primary/10 p-sm rounded-full">coffee</span>
+                                <span class="font-label-md text-label-md">Môi trường làm việc trẻ trung</span>
+                            </div>
+                            <div
+                                class="p-md bg-surface-container-low rounded-lg border border-outline-variant/30 flex items-center gap-md">
+                                <span
+                                    class="material-symbols-outlined text-primary bg-primary/10 p-sm rounded-full">laptop_mac</span>
+                                <span class="font-label-md text-label-md">Hỗ trợ thiết bị làm việc</span>
+                            </div>
+                            <div
+                                class="p-md bg-surface-container-low rounded-lg border border-outline-variant/30 flex items-center gap-md">
+                                <span
+                                    class="material-symbols-outlined text-primary bg-primary/10 p-sm rounded-full">home_work</span>
+                                <span class="font-label-md text-label-md">Làm việc Hybrid (Linh hoạt)</span>
+                            </div>
+                        </div>
+                    </section>
+                    <hr class="border-outline-variant" />
+                    <section class="flex items-center justify-between">
+                        <div class="flex items-center gap-md">
+                            <div class="relative">
+                                <img alt="Recruiter" class="w-14 h-14 rounded-full object-cover"
+                                    data-alt="Professional headshot of a recruitment manager in a bright office setting. The person is smiling warmly, wearing a professional navy blue suit. The background is a clean, modern workspace with blurred greenery and glass partitions, conveying a sense of corporate stability and approachability."
+                                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuAPbDeTisYgy8lmaDg9yN2G5dW15K6S6cmCe24ck4Gjg7bGm6Nd_spJhaNUfRu9uyekxwgrJ-UTmGDX0ocxy1qrFxHeFh4tR6ktt93_xAnONVlTknzTw16dxT5dHiymQ2KaOat6GJQQK5dCI6LiSVgimk3XnpvN_POnGHuAkEOTn25yAIDf859x6n50e3vCTVSAWavDJjLZziszJqpD4sEqq6MwgpSQCbFnsC_FNxI1eNyG0EOC_243vYk44dPtAUr4zewwrBBTKu7N" />
+                                <span
+                                    class="absolute bottom-0 right-0 bg-primary text-white p-xs rounded-full border-2 border-white">
+                                    <span class="material-symbols-outlined text-[12px]"
+                                        style="font-variation-settings: 'FILL' 1;">verified</span>
+                                </span>
+                            </div>
+                            <div>
+                                <h4 class="font-headline-sm text-headline-sm font-bold">Nguyễn Văn Nam</h4>
+                                <p class="text-on-surface-variant font-body-sm text-body-sm">Recruitment Manager at
+                                    Creative Studio Co.</p>
+                            </div>
+                        </div>
+                        <button class="text-primary font-bold hover:underline transition-all">Xem trang cá nhân</button>
+                    </section>
+                </article>
+            </div>
+            <!-- Sticky Sidebar (Right 30%) -->
+            <aside class="w-full lg:w-[30%]">
+                <div class="sticky-sidebar space-y-lg">
+                    <div
+                        class="bg-surface-container-lowest p-xl rounded-xl shadow-sm border border-outline-variant space-y-md">
+                        <button
+                            class="w-full bg-primary-container text-on-primary-container py-md rounded-xl font-bold flex items-center justify-center gap-sm hover:opacity-90 active:scale-[0.98] transition-all">
+                            <span class="material-symbols-outlined">send</span>
+                            Ứng tuyển ngay
+                        </button>
+                        <button
+                            class="w-full border border-outline-variant text-primary py-md rounded-xl font-bold flex items-center justify-center gap-sm hover:bg-surface-container-low active:scale-[0.98] transition-all">
+                            <span class="material-symbols-outlined">bookmark</span>
+                            Lưu công việc
+                        </button>
+                        <div class="pt-md space-y-md border-t border-outline-variant">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-sm text-on-surface-variant">
+                                    <span class="material-symbols-outlined text-[20px]">access_time</span>
+                                    <span class="font-body-sm text-body-sm">Thời gian</span>
+                                </div>
+                                <span class="font-label-md text-label-md">20h / Tuần</span>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-sm text-on-surface-variant">
+                                    <span class="material-symbols-outlined text-[20px]">group</span>
+                                    <span class="font-body-sm text-body-sm">Số lượng</span>
+                                </div>
+                                <span class="font-label-md text-label-md">02 người</span>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-sm text-on-surface-variant">
+                                    <span class="material-symbols-outlined text-[20px]">event_busy</span>
+                                    <span class="font-body-sm text-body-sm">Hạn nộp</span>
+                                </div>
+                                <span class="font-label-md text-label-md text-error">30/12/2024</span>
+                            </div>
+                        </div>
+                        <div class="pt-md space-y-sm">
+                            <p class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Chia
+                                sẻ công việc</p>
+                            <div class="flex gap-md">
+                                <button
+                                    class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center hover:bg-primary/10 transition-colors">
+                                    <img alt="Facebook" class="w-5 h-5"
+                                        src="https://lh3.googleusercontent.com/aida-public/AB6AXuB1--qcINrLIayzwGjv_oGg5hR_Kw1Hib-9vDHYsf7-N1FDgnjluXDbRwsf43Icp21LwxJyu7t_KCgvrv_hg8vTuNfzGIJcWCEdnBWEZjExzRpt-lXVjm8OoqIrXHWTmh_gX8gutseS5U003q9zoCMO2JIIKDZrdVgRFUHIMRMCPkB6AZ312xVQm3BFpunoF0L2Hy3IkO65mDI3deBMtwYhRbKI_m3mDKER_GInbR0P9vqCUDxDj8sybBc-uTy4jO50nOTEZMf8wMkn" />
+                                </button>
+                                <button
+                                    class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center hover:bg-primary/10 transition-colors">
+                                    <img alt="LinkedIn" class="w-5 h-5"
+                                        src="https://lh3.googleusercontent.com/aida-public/AB6AXuAvVYacTJkzk98GJYMahra49h71KnF-AnKgzgCpvPNVKJz-40d6bnQ2TtFpOeh9-4xK4u6QHCP0-AVT8EVI-ZUPUuRykKTFKzH_IQwQ1vSY4kox70WTmG5ANyipn2bvnkA0asn_1bXM32QljtURLVGKsb6-R1XgnPduqi8K8PGuBlIL3lx__2493NZoJ5wLXKwQYMqUsD8koyJm76v6n3Yiggx4FvOh-plCuBvx-cgPuxp2RDVDO2OKGa0XeARXjZ2b97mOK-ItU65c" />
+                                </button>
+                                <button
+                                    class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center hover:bg-primary/10 transition-colors">
+                                    <img alt="Twitter" class="w-5 h-5"
+                                        src="https://lh3.googleusercontent.com/aida-public/AB6AXuCxHPB0SsjdIlc_U6hliz6Xp7b39w4WKcQ-CpBv4in2_YYvD-eMddQq1Im2li7KNZZv_azHAyJ3kmIsYiwgworrbpJlvf27cZeTMU7MVPvDgoe8CQpbll1HwdWtccUIxGUIIZSkwjs1D3mqiaCDMQ9fZ6pR_Dr9VEITuYPrE7dxGe3rynNQ-uwWNwuKDeHD41Sxzjx-1KxKVodOGKD1QuS5Sref7mmh7CbCi5dvpZrOaV8ryopem-frkaPFCZObOkhKDw9E-CrEq9vL" />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Safety Tip card -->
+                    <div class="bg-primary/5 p-lg rounded-xl border border-primary/20">
+                        <div class="flex items-center gap-sm text-primary mb-sm">
+                            <span class="material-symbols-outlined">shield</span>
+                            <span class="font-bold font-label-md text-label-md">Mẹo an toàn</span>
+                        </div>
+                        <p class="font-body-sm text-body-sm text-on-surface-variant">
+                            Không bao giờ trả bất kỳ khoản phí nào để xin việc. Hãy báo cáo nếu thấy dấu hiệu nghi ngờ.
+                        </p>
+                    </div>
+                </div>
+            </aside>
+        </div>
+        <!-- Related Jobs Section -->
+        <section class="mt-3xl">
+            <div class="flex justify-between items-center mb-xl">
+                <h2 class="font-display text-headline-md font-bold text-on-surface">Việc làm tương tự</h2>
+                <a class="text-primary font-bold flex items-center gap-xs hover:gap-md transition-all" href="#">
+                    Xem tất cả <span class="material-symbols-outlined">arrow_forward</span>
+                </a>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-lg">
+                <!-- Related Card 1 -->
+                <div
+                    class="bg-surface-container-lowest p-lg rounded-xl shadow-sm border border-outline-variant hover:scale-[1.01] transition-transform duration-200">
+                    <div class="flex items-start gap-md mb-md">
+                        <div
+                            class="w-12 h-12 bg-surface-container rounded-lg flex items-center justify-center overflow-hidden">
+                            <img alt="Logo" class="object-contain p-2"
+                                src="https://lh3.googleusercontent.com/aida-public/AB6AXuDLZXF7sDBgTH5_Mhi4Tg-Bi_UEQWv2daUq7VNYgCPJsHExrYnbs08cu5O6i4Zo5X1rggook_kmkEXS_yUWDgmAdDxTQBotqaAJqPMOXbrUJby-aF2YxuuWTgGAqSZ3nxQtwQiv6cN0UxiI1CNCF34jvDhcH4_5MI3oMLtAiOuJ5e_fwaCFdNlS8PaRYVwCd0RHyZ-af1-p45JlweU2UcqbqFa2R-bdrwDxQ2Fxx4OPa4ZP1QuuMztUII2F9GnfV2FgxzNwTBopxNx0" />
+                        </div>
+                        <div>
+                            <h3 class="font-headline-sm text-headline-sm font-bold line-clamp-1">UI Designer</h3>
+                            <p class="text-on-surface-variant font-body-sm text-body-sm">Global Digital</p>
+                        </div>
+                    </div>
+                    <div class="space-y-md">
+                        <div class="flex items-center gap-sm text-on-surface-variant font-body-sm text-body-sm">
+                            <span class="material-symbols-outlined text-[18px]">location_on</span> Quận 3, HCM
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span
+                                class="bg-secondary-container text-on-secondary-container px-sm py-xs rounded text-label-sm font-label-sm">Part-time</span>
+                            <span class="text-primary font-bold">12tr - 15tr</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Related Card 2 -->
+                <div
+                    class="bg-surface-container-lowest p-lg rounded-xl shadow-sm border border-outline-variant hover:scale-[1.01] transition-transform duration-200">
+                    <div class="flex items-start gap-md mb-md">
+                        <div
+                            class="w-12 h-12 bg-surface-container rounded-lg flex items-center justify-center overflow-hidden">
+                            <img alt="Logo" class="object-contain p-2"
+                                src="https://lh3.googleusercontent.com/aida-public/AB6AXuAe8hOzFIqX74V76mPVmYvBzrSg6L4UEysSVpprdbp67W4XOctMGrbgv0W2JckAWyOPr_3ukwu_BJZ6xWYj8X98RxUkmydMv1xjkDZLhTDIvJztnWJs7rAN4Ab25VSyVcCCjBtB0MEomANINjFuqkWJrZjgsvyPDb2VYGeS60tG3B6-oaXQ1EMs0q980kH1wMQH-1Dsv_PWBALg3O65bilaN1GhlLe006FP3iesuXtCExc1Ojt3hNxYPv26WRgmRrNcgIS3u0UnUyFt" />
+                        </div>
+                        <div>
+                            <h3 class="font-headline-sm text-headline-sm font-bold line-clamp-1">Product Designer</h3>
+                            <p class="text-on-surface-variant font-body-sm text-body-sm">Tech Solutions</p>
+                        </div>
+                    </div>
+                    <div class="space-y-md">
+                        <div class="flex items-center gap-sm text-on-surface-variant font-body-sm text-body-sm">
+                            <span class="material-symbols-outlined text-[18px]">location_on</span> Quận Phú Nhuận, HCM
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span
+                                class="bg-secondary-container text-on-secondary-container px-sm py-xs rounded text-label-sm font-label-sm">Part-time</span>
+                            <span class="text-primary font-bold">18tr - 25tr</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Related Card 3 -->
+                <div
+                    class="bg-surface-container-lowest p-lg rounded-xl shadow-sm border border-outline-variant hover:scale-[1.01] transition-transform duration-200">
+                    <div class="flex items-start gap-md mb-md">
+                        <div
+                            class="w-12 h-12 bg-surface-container rounded-lg flex items-center justify-center overflow-hidden">
+                            <img alt="Logo" class="object-contain p-2"
+                                src="https://lh3.googleusercontent.com/aida-public/AB6AXuC3wwLk29TQTw2fENAl_ITqdPXUibPvgBYKE0cFqymTNPzr0WsRGDKmnWAN8gSqYnG3RJn1QG6x3StFoYKmHH_9SEjniPOK5dPe7I2PwY95TnRuCbCiiYfg50aQwlhtgKY2aya5MGjM6Ru6XV5Qk35mhahbJIfi2CnN953-NzPzA_dgXgvdRXhoT7vXpMPHqcyHh-EL173oMx4VXqPxQXSC0Msg1jzXC-SClYnwA3SXXNWHXcGw6DB9ZfgbwbiKu0u8F5DRPNe6cjGG" />
+                        </div>
+                        <div>
+                            <h3 class="font-headline-sm text-headline-sm font-bold line-clamp-1">Graphic Designer</h3>
+                            <p class="text-on-surface-variant font-body-sm text-body-sm">Vision Agency</p>
+                        </div>
+                    </div>
+                    <div class="space-y-md">
+                        <div class="flex items-center gap-sm text-on-surface-variant font-body-sm text-body-sm">
+                            <span class="material-symbols-outlined text-[18px]">location_on</span> Quận 7, HCM
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span
+                                class="bg-secondary-container text-on-secondary-container px-sm py-xs rounded text-label-sm font-label-sm">Part-time</span>
+                            <span class="text-primary font-bold">10tr - 14tr</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <!-- Footer -->
+    <footer class="bg-surface-container-highest dark:bg-inverse-surface border-t border-outline-variant w-full mt-3xl">
+        <div class="flex flex-col md:flex-row justify-between items-center py-xl px-gutter max-w-container-max mx-auto">
+            <div class="mb-md md:mb-0">
+                <span
+                    class="font-display text-headline-sm font-bold text-primary dark:text-primary-fixed">JobFlow</span>
+                <p class="text-on-surface-variant font-body-sm text-body-sm mt-xs">© 2024 JobFlow. Empowering students
+                    and freelancers.</p>
+            </div>
+            <div class="flex gap-xl">
+                <a class="text-on-surface-variant hover:text-primary dark:hover:text-primary-fixed-dim transition-colors font-body-sm text-body-sm"
+                    href="#">About</a>
+                <a class="text-on-surface-variant hover:text-primary dark:hover:text-primary-fixed-dim transition-colors font-body-sm text-body-sm"
+                    href="#">Privacy</a>
+                <a class="text-on-surface-variant hover:text-primary dark:hover:text-primary-fixed-dim transition-colors font-body-sm text-body-sm"
+                    href="#">Terms</a>
+                <a class="text-on-surface-variant hover:text-primary dark:hover:text-primary-fixed-dim transition-colors font-body-sm text-body-sm"
+                    href="#">Support</a>
+            </div>
+        </div>
+    </footer>
+</body>
+
+</html>

@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.database import get_db
 from core.security import decode_token
 from models.user import User
+from core.redis import redis_client
 
 
 async def get_current_user(
@@ -18,6 +19,15 @@ async def get_current_user(
     )
     if not access_token:
         raise credentials_exception
+    
+    # Check blacklist — token đã logout chưa
+    is_blacklisted = await redis_client.get(f"blacklist:{access_token}")
+    if is_blacklisted:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token đã hết hiệu lực, vui lòng đăng nhập lại",
+        )
+
     try:
         user_id = decode_token(access_token, token_type="access")
     except JWTError:

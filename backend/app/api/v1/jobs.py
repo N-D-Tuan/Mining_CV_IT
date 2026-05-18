@@ -1,4 +1,5 @@
 from typing import Optional
+from sqlalchemy import func
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -45,11 +46,32 @@ async def get_jobs(
     has_next = len(jobs) > query.limit
     items = jobs[:query.limit]
 
+    # compute total matching rows (ignore cursor/limit)
+    count_stmt = select(func.count()).select_from(Job)
+    # apply same filters as above, but do NOT apply cursor or limit
+    if query.title:
+        count_stmt = count_stmt.where(Job.title.ilike(f"%{query.title}%"))
+    if query.employer_name:
+        count_stmt = count_stmt.where(Job.employer_name.ilike(f"%{query.employer_name}%"))
+    if query.job_type:
+        count_stmt = count_stmt.where(Job.job_type == query.job_type)
+    if query.min_salary is not None:
+        count_stmt = count_stmt.where(Job.min_salary >= query.min_salary)
+    if query.max_salary is not None:
+        count_stmt = count_stmt.where(Job.max_salary <= query.max_salary)
+    if query.created_from:
+        count_stmt = count_stmt.where(Job.created_at >= query.created_from)
+    if query.created_to:
+        count_stmt = count_stmt.where(Job.created_at <= query.created_to)
+
+    total = await db.scalar(count_stmt)
+
     return ApiResponse(
         data={
             "items": [JobResponse.model_validate(j) for j in items],
             "next_cursor": items[-1].id if has_next else None,
             "has_next": has_next,
+            "total": int(total or 0),
         }
     )
 
