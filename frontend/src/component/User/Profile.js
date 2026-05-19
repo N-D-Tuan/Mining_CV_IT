@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 
 const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:8000';
 
@@ -21,20 +21,31 @@ function formatSalary(value) {
 
 export default function Profile() {
     const navigate = useNavigate();
+    const location = useLocation();
     const [profile, setProfile] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [activeTab, setActiveTab] = useState('saved');
+    const [activeTab, setActiveTab] = useState(location.state?.tab || 'saved');
     const [savedJobs, setSavedJobs] = useState([]);
     const [appliedJobs, setAppliedJobs] = useState([]);
     const [loadingSavedJobs, setLoadingSavedJobs] = useState(false);
     const [loadingAppliedJobs, setLoadingAppliedJobs] = useState(false);
     const [jobsError, setJobsError] = useState(null);
+    const [recentActivities, setRecentActivities] = useState([]);
 
+    useEffect(() => {
+        if (location.state && location.state.tab) {
+            setActiveTab(location.state.tab);
+        }
+    }, [location.state]);
+    
     useEffect(() => {
         fetchProfile();
         fetchSavedJobs();
         fetchAppliedJobs();
+
+        const stored = JSON.parse(localStorage.getItem("recentActivities") || "[]");
+        setRecentActivities(stored);
     }, []);
 
     async function fetchProfile() {
@@ -317,8 +328,33 @@ export default function Profile() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-lg">
                         {activeTab === 'recent' ? (
-                            <div className="lg:col-span-2 rounded-xl bg-surface-container-lowest border border-outline-variant p-xl text-center text-on-surface-variant">
-                                Tính năng hoạt động gần đây đang được cập nhật. Vui lòng thử lại sau.
+                            <div className="lg:col-span-2 rounded-xl bg-surface-container-lowest border border-outline-variant p-md">
+                                <h3 className="font-headline-sm px-md py-sm border-b border-outline-variant text-on-surface mb-md">Vết hoạt động của bạn</h3>
+                                
+                                {recentActivities.length === 0 ? (
+                                    <div className="p-xl text-center text-on-surface-variant">Bạn chưa có hoạt động nào gần đây.</div>
+                                ) : (
+                                    /* Hộp chứa có thanh cuộn dọc, giới hạn chiều cao */
+                                    <ul className="max-h-[500px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                                        {recentActivities.map(act => (
+                                            <li key={act.id} className="p-md hover:bg-surface-container-low rounded-lg transition-colors border border-transparent hover:border-outline-variant">
+                                                <div className="flex justify-between items-start gap-md">
+                                                    <div>
+                                                        <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant bg-surface-container-high px-2 py-1 rounded mb-2 inline-block">
+                                                            {act.type === 'view' ? 'Xem tin' : act.type === 'save' ? 'Lưu việc' : act.type === 'unsave' ? 'Bỏ lưu' : act.type === 'apply' ? 'Ứng tuyển' : 'Tìm kiếm'}
+                                                        </span>
+                                                        <Link to={act.link || "#"} className="block font-label-md text-on-surface hover:text-primary transition-colors">
+                                                            {act.title}
+                                                        </Link>
+                                                    </div>
+                                                    <span className="text-body-sm text-on-surface-variant whitespace-nowrap">
+                                                        {new Date(act.timestamp).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
+                                                    </span>
+                                                </div>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
                             </div>
                         ) : (activeTab === 'saved' ? loadingSavedJobs : loadingAppliedJobs) ? (
                             <div className="lg:col-span-2 rounded-xl bg-surface-container-lowest border border-outline-variant p-xl text-center text-on-surface-variant">

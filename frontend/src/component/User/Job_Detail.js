@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef} from "react";
 import { Link, useParams } from "react-router-dom";
 import { Bookmark } from "lucide-react";
 
@@ -15,8 +15,22 @@ export default function Job_Detail() {
     const [saveLoading, setSaveLoading] = useState(false);
     const [applyLoading, setApplyLoading] = useState(false);
     const [related, setRelated] = useState([]);
+    const hasRecordedView = useRef(false);
+
+    const recordActivity = (type, title, url) => {
+        const activities = JSON.parse(localStorage.getItem("recentActivities") || "[]");
+        activities.unshift({
+            id: Date.now(),
+            type,
+            title,
+            timestamp: new Date().toISOString(),
+            link: url
+        });
+        localStorage.setItem("recentActivities", JSON.stringify(activities.slice(0, 50)));
+    };
 
     useEffect(() => {
+        hasRecordedView.current = false;
         if (!id) return;
         fetchJob();
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -37,6 +51,11 @@ export default function Job_Detail() {
                 fetchRelated(jobData);
                 await fetchSavedStatus(id);
                 await fetchAppliedStatus(id);
+
+                if (jobData && !hasRecordedView.current) {
+                    recordActivity("view", `Đã xem: ${jobData.title}`, `/jobs/${id}`);
+                    hasRecordedView.current = true; // Đánh dấu là đã lưu để request thứ 2 bị chặn lại
+                }
             }
         } catch (err) {
             setError("Lỗi khi tải dữ liệu. Vui lòng thử lại");
@@ -116,6 +135,9 @@ export default function Job_Detail() {
                 return;
             }
             setApplied(true);
+
+            recordActivity("apply", `Đã ứng tuyển: ${job.title}`, `/jobs/${id}`);
+
             if (job.link) {
                 window.open(job.link, "_blank");
             } else {
@@ -142,6 +164,8 @@ export default function Job_Detail() {
                 return;
             }
             setSaved(!saved);
+
+            recordActivity(saved ? "unsave" : "save", `${saved ? 'Bỏ lưu' : 'Đã lưu'}: ${job.title}`, `/jobs/${id}`);
         } catch (err) {
             alert("Lỗi khi lưu công việc. Vui lòng thử lại.");
         } finally {
