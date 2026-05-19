@@ -3,7 +3,7 @@ from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.timezone import to_vn_time
- 
+from core.redis import redis_client
 from core.database import get_db
 from core.security import (
     create_access_token,
