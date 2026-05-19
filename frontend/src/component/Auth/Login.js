@@ -35,6 +35,11 @@ export default function Login() {
                 return;
             }
             setUser(body.data || null);
+
+            if (body.data) {
+                localStorage.setItem("user", JSON.stringify(body.data));
+            }
+
             const profileRes = await fetch(`${API_BASE}/api/v1/users/profile`, {
                 method: 'GET',
                 credentials: 'include',
@@ -78,6 +83,11 @@ export default function Login() {
                 return;
             }
             setUser(body.data || null);
+
+            if (body.data) {
+                localStorage.setItem("user", JSON.stringify(body.data));
+            }
+            
             const profileRes = await fetch(`${API_BASE}/api/v1/users/profile`, {
                 method: 'GET',
                 credentials: 'include',
