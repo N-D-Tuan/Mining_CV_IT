@@ -173,6 +173,20 @@ export default function Search_UI() {
     if (sortBy && sortBy !== "newest") params.set("sort", sortBy);
 
     setSearchParams(params, { replace: true });
+
+    if (searchText.trim()) {
+        const activities = JSON.parse(localStorage.getItem("recentActivities") || "[]");
+        // unshift để đẩy hoạt động mới lên đầu mảng
+        activities.unshift({
+            id: Date.now(),
+            type: "search",
+            title: `Tìm kiếm từ khóa: "${searchText}"`,
+            timestamp: new Date().toISOString(),
+            link: `/browse?title=${searchText}`
+        });
+        // Chỉ lưu tối đa 50 hoạt động gần nhất để không làm nặng trình duyệt
+        localStorage.setItem("recentActivities", JSON.stringify(activities.slice(0, 50)));
+    }
   }
 
   function handleClearFilters() {

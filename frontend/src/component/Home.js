@@ -1,4 +1,59 @@
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+
+const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:8000';
+
 export default function Home() {
+    const [recentActivities, setRecentActivities] = useState([]);
+
+    const [appliedCount, setAppliedCount] = useState(0);
+    const [savedCount, setSavedCount] = useState(0);
+
+    useEffect(() => {
+        // Đọc từ localStorage và chỉ lấy 3 hoạt động mới nhất cho trang chủ
+        const stored = JSON.parse(localStorage.getItem("recentActivities") || "[]");
+        setRecentActivities(stored.slice(0, 3));
+
+        // 1. Lấy số lượng đã ứng tuyển
+        fetch(`${API_BASE}/api/v1/users/applied-jobs`, { credentials: 'include' })
+            .then(res => res.json())
+            .then(data => {
+                if (data.data) {
+                    // Ưu tiên lấy biến total từ API, nếu không có thì lấy độ dài mảng items
+                    setAppliedCount(data.data.total || data.data.items?.length || 0);
+                }
+            })
+            .catch(err => console.log("Lỗi tải ứng tuyển:", err));
+
+        // 2. Lấy số lượng đã lưu
+        fetch(`${API_BASE}/api/v1/users/saved-jobs`, { credentials: 'include' })
+            .then(res => res.json())
+            .then(data => {
+                if (data.data) {
+                    setSavedCount(data.data.total || data.data.items?.length || 0);
+                }
+            })
+            .catch(err => console.log("Lỗi tải đã lưu:", err));
+    }, []);
+
+    // Hàm chọn màu và icon tùy theo loại hoạt động
+    const getActivityStyle = (type) => {
+        switch (type) {
+            case 'apply': return { icon: 'send', bg: 'bg-primary text-on-primary' };
+            case 'save': return { icon: 'bookmark', bg: 'bg-secondary text-on-secondary' };
+            case 'unsave': return { icon: 'bookmark_remove', bg: 'bg-error text-on-error' };
+            case 'search': return { icon: 'search', bg: 'bg-tertiary text-on-tertiary' };
+            case 'view': return { icon: 'visibility', bg: 'bg-outline-variant text-on-surface' };
+            default: return { icon: 'history', bg: 'bg-surface-container-high text-on-surface' };
+        }
+    };
+
+    // Hàm format thời gian đẹp
+    const formatTime = (isoString) => {
+        const date = new Date(isoString);
+        return date.toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    };
+
     return (
         <>
             <div class="p-gutter max-w-container-max mx-auto space-y-xl">
@@ -15,7 +70,7 @@ export default function Home() {
                                     class="material-symbols-outlined text-[14px]">trending_up</span></span>
                         </div>
                         <h3 class="font-body-sm text-on-surface-variant">Tổng công việc đã ứng tuyển</h3>
-                        <p class="font-display text-headline-md mt-xs">24</p>
+                        <p class="font-display text-headline-md mt-xs">{appliedCount}</p>
                     </div>
                     {/* <!-- Stat Card 2 --> */}
                     <div
@@ -27,7 +82,7 @@ export default function Home() {
                             <span class="text-on-surface-variant font-label-sm">Ổn định</span>
                         </div>
                         <h3 class="font-body-sm text-on-surface-variant">Công việc đã lưu</h3>
-                        <p class="font-display text-headline-md mt-xs">15</p>
+                        <p class="font-display text-headline-md mt-xs">{savedCount}</p>
                     </div>
                     {/* <!-- Stat Card 3 --> */}
                     <div
@@ -116,48 +171,33 @@ export default function Home() {
                         </div>
                     </div>
                     {/* <!-- Recent Activity Timeline --> */}
-                    <div
-                        class="lg:col-span-4 bg-surface-container-lowest p-xl rounded-xl border border-outline-variant shadow-sm overflow-hidden flex flex-col">
-                        <h2 class="font-headline-sm mb-xl">Hoạt động gần đây</h2>
-                        <div class="space-y-lg relative flex-1">
-                            {/* <!-- Timeline Line --> */}
-                            <div class="absolute left-3 top-2 bottom-2 w-0.5 bg-outline-variant"></div>
-                            <div class="relative flex gap-md items-start">
-                                <div
-                                    class="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center z-10 shrink-0">
-                                    <span class="material-symbols-outlined text-[14px]"
-                                        style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-                                </div>
-                                <div class="flex flex-col">
-                                    <span class="font-label-md text-on-surface">Ứng tuyển thành công: Graphic
-                                        Designer</span>
-                                    <span class="font-body-sm text-on-surface-variant">Hôm nay, 09:30 AM</span>
-                                </div>
-                            </div>
-                            <div class="relative flex gap-md items-start">
-                                <div
-                                    class="w-6 h-6 rounded-full bg-secondary text-on-secondary flex items-center justify-center z-10 shrink-0">
-                                    <span class="material-symbols-outlined text-[14px]" style={{ fontVariationSettings: "'FILL' 1" }}>mail</span>
-                                </div>
-                                <div class="flex flex-col">
-                                    <span class="font-label-md text-on-surface">Phỏng vấn mời từ The Coffee House</span>
-                                    <span class="font-body-sm text-on-surface-variant">Hôm qua, 03:15 PM</span>
-                                </div>
-                            </div>
-                            <div class="relative flex gap-md items-start">
-                                <div
-                                    class="w-6 h-6 rounded-full bg-outline-variant text-on-surface flex items-center justify-center z-10 shrink-0">
-                                    <span class="material-symbols-outlined text-[14px]">notifications_active</span>
-                                </div>
-                                <div class="flex flex-col">
-                                    <span class="font-label-md text-on-surface">Cảnh báo việc làm mới: UI/UX
-                                        Designer</span>
-                                    <span class="font-body-sm text-on-surface-variant">25 Th05, 10:00 AM</span>
-                                </div>
-                            </div>
+                    <div className="lg:col-span-4 bg-surface-container-lowest p-xl rounded-xl border border-outline-variant shadow-sm overflow-hidden flex flex-col">
+                        <h2 className="font-headline-sm mb-xl">Hoạt động gần đây</h2>
+                        <div className="space-y-lg relative flex-1">
+                            <div className="absolute left-3 top-2 bottom-2 w-0.5 bg-outline-variant"></div>
+                            
+                            {recentActivities.length === 0 ? (
+                                <div className="text-on-surface-variant text-body-sm pl-8">Chưa có hoạt động nào.</div>
+                            ) : (
+                                recentActivities.map((act) => {
+                                    const style = getActivityStyle(act.type);
+                                    return (
+                                        <div key={act.id} className="relative flex gap-md items-start group">
+                                            <div className={`w-6 h-6 rounded-full ${style.bg} flex items-center justify-center z-10 shrink-0 shadow-sm`}>
+                                                <span className="material-symbols-outlined text-[14px]">{style.icon}</span>
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <Link to={act.link || "#"} className="font-label-md text-on-surface hover:text-primary transition-colors line-clamp-1">
+                                                    {act.title}
+                                                </Link>
+                                                <span className="font-body-sm text-on-surface-variant">{formatTime(act.timestamp)}</span>
+                                            </div>
+                                        </div>
+                                    )
+                                })
+                            )}
                         </div>
-                        <button class="mt-xl text-primary font-label-md hover:underline text-left">Xem tất cả hoạt
-                            động</button>
+                        <Link to="/profile" state={{ tab: 'recent' }} className="mt-xl text-primary font-label-md hover:underline text-left block">Xem tất cả trong Hồ sơ</Link>
                     </div>
                     {/* <!-- Recommended Carousel Section --> */}
                     <div class="lg:col-span-12">
