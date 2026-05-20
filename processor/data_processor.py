@@ -1,5 +1,7 @@
 import os
 import re
+import time  # THÊM MỚI: Dùng để khống chế tốc độ gọi API tránh bị block
+import requests  # THÊM MỚI: Thư viện call API Geocoding
 import pandas as pd
 import psycopg2
 import redis
@@ -93,6 +95,51 @@ def clean_salary_numbers(row):
 
     # Fix: Trả về một Series có TÊN CỘT RÕ RÀNG để Pandas không bị nhầm lẫn
     return pd.Series({'min_salary': min_sal, 'max_salary': max_sal})
+
+# =========================================================
+# THÊM MỚI: HÀM CALL API LẤY TỌA ĐỘ ĐỊA LÝ (GEOCODING)
+# =========================================================
+def get_coordinates(address, city):
+    """
+    Sử dụng OpenStreetMap Nominatim API để lấy lat, lng.
+    Yêu cầu đảm bảo rate limit tối đa 1 request / giây.
+    """
+    if not address or str(address).strip() == '':
+        return None, None
+        
+    search_city = city if city else "Đà Nẵng"
+    full_address = f"{address}, {search_city}, Việt Nam"
+    
+    # Định danh User-Agent để tránh bị OpenStreetMap block (HTTP 403)
+    headers = {
+        'User-Agent': 'FB_Job_Geocoding_Bot/1.0 (contact: admin@timviecparttime.com)'
+    }
+    
+    url = "https://nominatim.openstreetmap.org/search"
+    params = {
+        'q': full_address,
+        'format': 'json',
+        'limit': 1
+    }
+    
+    try:
+        time.sleep(1.1) # Nghỉ 1 giây để bảo vệ Rate Limit
+        response = requests.get(url, params=params, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data:
+                return float(data[0]['lat']), float(data[0]['lon'])
+            else:
+                # Fallback: Nếu không tìm thấy địa chỉ chi tiết, quét thô theo Tỉnh/Thành phố
+                params['q'] = f"{search_city}, Việt Nam"
+                response = requests.get(url, params=params, headers=headers, timeout=5)
+                if response.status_code == 200 and response.json():
+                    return float(response.json()[0]['lat']), float(response.json()[0]['lon'])
+        return None, None
+    except Exception as e:
+        print(f"    [!] Lỗi khi gọi Geocoding API: {e}")
+        return None, None
 
 # ==========================================
 # 3. CORE CHÍNH: XỬ LÝ VÀ LƯU DATABASE
@@ -194,20 +241,24 @@ def process_and_save_data():
                 final_min_sal = int(row['min_salary']) if row['min_salary'] is not None else None
                 final_max_sal = int(row['max_salary']) if row['max_salary'] is not None else None
 
+                # THÊM MỚI: Tiến hành dịch địa chỉ thành tọa độ
+                lat, lng = get_coordinates(row['address'], row['city'])
+
+                # THÊM MỚI: Bổ sung 2 trường lat, lng vào câu lệnh SQL INSERT
                 cursor.execute("""
                     INSERT INTO jobs (
                         title, employer_name, raw_salary, min_salary, max_salary, 
                         salary_type, city, address, job_type, experience_required, 
-                        requirements, post_content, link, source
+                        requirements, post_content, link, source, lat, lng
                     ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                     ) RETURNING id
                 """, (
                     row['title'], row['employer_name'], row['raw_salary'],
                     final_min_sal, final_max_sal, row['salary_type'],
                     row['city'], row['address'], row['job_type'],
                     row['experience_required'], row['requirements'],
-                    row['post_content'], link, row['source']
+                    row['post_content'], link, row['source'], lat, lng
                 ))
                 
                 # Lấy ID của công việc vừa được lưu vào Postgres
@@ -221,16 +272,20 @@ def process_and_save_data():
                 # THÊM MỚI: BẮN EVENT LÊN REDIS STREAM
                 # ==========================================
                 try:
+                    # THÊM MỚI: Đính kèm luôn chuỗi tọa độ lat, lng vào thông điệp Stream 
+                    # giúp các Service theo dõi (Consumer) lấy được ngay mà không cần query lại DB
                     event_data = {
                         'job_id': str(new_job_id),
                         'title': str(row['title']) if pd.notna(row['title']) else 'Không có tiêu đề',
                         'employer': str(row['employer_name']) if pd.notna(row['employer_name']) else 'Ẩn danh',
-                        'source': str(row['source']) if pd.notna(row['source']) else 'Unknown'
+                        'source': str(row['source']) if pd.notna(row['source']) else 'Unknown',
+                        'lat': str(lat) if lat is not None else 'None',
+                        'lng': str(lng) if lng is not None else 'None'
                     }
                     
                     # 'new_jobs_stream' là tên của dòng chảy sự kiện.
                     redis_client.xadd('new_jobs_stream', event_data, '*')
-                    print(f"    [>] Đã bắn tin lên Redis Stream: {row['title']}")
+                    print(f"    [>] Đã bắn tin lên Redis Stream kèm tọa độ: {row['title']}")
                 except Exception as redis_err:
                     print(f"    [!] Lỗi khi bắn tin Redis (Job vẫn được lưu DB): {redis_err}")
                 # ==========================================
@@ -253,3 +308,8 @@ def process_and_save_data():
 
 if __name__ == "__main__":
     process_and_save_data()
+
+# Cập nhật db
+# ALTER TABLE public.jobs 
+# ADD COLUMN IF NOT EXISTS lat NUMERIC(10, 8),
+# ADD COLUMN IF NOT EXISTS lng NUMERIC(11, 8);

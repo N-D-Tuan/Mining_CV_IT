@@ -1,6 +1,7 @@
 from typing import List, Optional
+from decimal import Decimal
 
-from sqlalchemy import BIGINT, String, Text
+from sqlalchemy import BIGINT, String, Text, Numeric
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -54,6 +55,17 @@ class Job(Base, TimestampMixin):
 
     source: Mapped[Optional[str]] = mapped_column(
         String(255)
+    )
+
+    # Thêm 2 thuộc tính lat, lng
+    lat: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(precision=10, scale=8), 
+        nullable=True
+    )
+
+    lng: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(precision=11, scale=8), 
+        nullable=True
     )
 
     saved_by_users: Mapped[List["SavedJob"]] = relationship(

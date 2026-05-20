@@ -12,6 +12,10 @@ import Login from './component/Auth/Login';
 import Update_Profile from './component/User/Update_Profile';
 import Job_Detail from './component/User/Job_Detail';
 
+import "leaflet/dist/leaflet.css";
+import "./lib/leaflet";
+import JobsMapPage from './pages/JobsMapPage';
+
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
@@ -25,6 +29,7 @@ root.render(
           <Route path="/login" element={<Login />} />
           <Route path="/update-profile" element={<Update_Profile />} />
           <Route path="/jobs/:id" element={<Job_Detail />} />
+          <Route path="/jobs/map" element={<JobsMapPage />} />
         </Routes>
       </App>
     </BrowserRouter>

@@ -32,6 +32,10 @@ class JobResponse(BaseModel):
 
     source: Optional[str]
 
+    # THÊM MỚI: TOẠ ĐỘ ĐỂ FRONTEND DRAW MARKER TRÊN MAP
+    lat: Optional[float] = Field(default=None, description="Vĩ độ")
+    lng: Optional[float] = Field(default=None, description="Kinh độ")
+
     created_at: datetime
 
     model_config = {
@@ -86,3 +90,14 @@ class SavedJobsResponse(
     CursorPagination[JobResponse]
 ):
     pass
+
+
+# Thêm mới cho endpoint GET MAP JOBS
+class GetJobMapQuery(JobFilterQuery):
+    """
+    Sử dụng khi User bật định vị trên bản đồ.
+    Kế thừa JobFilterQuery để vừa tìm theo vị trí vừa lọc được lương/loại công việc.
+    """
+    lat: float = Field(..., ge=-90, le=90, description="Vĩ độ hiện tại của người dùng")
+    lng: float = Field(..., ge=-180, le=180, description="Kinh độ hiện tại của người dùng")
+    radius: float = Field(default=5.0, ge=0.1, description="Bán kính tìm kiếm (đơn vị: km)")
