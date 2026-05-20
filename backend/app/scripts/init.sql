@@ -32,6 +32,9 @@ CREATE TABLE IF NOT EXISTS jobs (
     -- Địa điểm (Rất quan trọng với sinh viên)
     city VARCHAR(100),            -- Thành phố (Hà Nội, HCM...) 
     address TEXT,                 -- Địa chỉ cụ thể của quán
+
+    lat NUMERIC(10, 8),           -- Vĩ độ (Latitude) - Cho phép lưu tối đa 8 chữ số thập phân (độ chính xác đến mm)
+    lng NUMERIC(11, 8),           -- Kinh độ (Longitude) - Cho phép lưu tối đa 8 chữ số thập phân
     
     -- Tính chất công việc
     job_type VARCHAR(100),        -- Loại hình (Part-time, Full-time, Ca gãy, Ca xoay)
