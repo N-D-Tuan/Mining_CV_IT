@@ -9,6 +9,7 @@ import { Link } from "react-router-dom";
 
 export default function JobsMapPage() {
   const { location, loading, error } = useGeolocation();
+  console.log("[location]", location);
 
   const [radius, setRadius] = useState(5);
   const [jobs, setJobs] = useState([]);

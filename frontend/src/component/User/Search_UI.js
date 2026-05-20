@@ -43,9 +43,13 @@ export default function Search_UI() {
 
   const queryTitle = searchParams.get("title") || "";
   const queryCity = searchParams.get("city") || "";
-  const queryCategories = (searchParams.get("categories") || "").split("|").filter(Boolean);
+  const queryCategories = (searchParams.get("categories") || "")
+    .split("|")
+    .filter(Boolean);
   const queryWorkType = searchParams.get("job_type") || "";
-  const querySalaryMax = searchParams.get("max_salary") ? Number(searchParams.get("max_salary")) / 1000000 : 50;
+  const querySalaryMax = searchParams.get("max_salary")
+    ? Number(searchParams.get("max_salary")) / 1000000
+    : 50;
   const querySort = searchParams.get("sort") || "newest";
 
   useEffect(() => {
@@ -78,10 +82,14 @@ export default function Search_UI() {
 
   const sortedJobs = useMemo(() => {
     if (sortBy === "salary_high") {
-      return [...jobs].sort((a, b) => (b.max_salary || 0) - (a.max_salary || 0));
+      return [...jobs].sort(
+        (a, b) => (b.max_salary || 0) - (a.max_salary || 0),
+      );
     }
     if (sortBy === "salary_low") {
-      return [...jobs].sort((a, b) => (a.min_salary || 0) - (b.min_salary || 0));
+      return [...jobs].sort(
+        (a, b) => (a.min_salary || 0) - (b.min_salary || 0),
+      );
     }
     return jobs;
   }, [jobs, sortBy]);
@@ -153,7 +161,9 @@ export default function Search_UI() {
 
   function handleCategoryChange(option) {
     if (selectedCategories.includes(option.label)) {
-      setSelectedCategories((prev) => prev.filter((item) => item !== option.label));
+      setSelectedCategories((prev) =>
+        prev.filter((item) => item !== option.label),
+      );
       return;
     }
     setSelectedCategories((prev) => [...prev, option.label]);
@@ -167,7 +177,8 @@ export default function Search_UI() {
     const params = new URLSearchParams();
     if (searchText) params.set("title", searchText);
     if (cityText) params.set("city", cityText);
-    if (selectedCategories.length) params.set("categories", selectedCategories.join("|"));
+    if (selectedCategories.length)
+      params.set("categories", selectedCategories.join("|"));
     if (selectedWorkType) params.set("job_type", selectedWorkType);
     if (salaryMax < 50) params.set("max_salary", String(salaryMax * 1000000));
     if (sortBy && sortBy !== "newest") params.set("sort", sortBy);
@@ -175,17 +186,22 @@ export default function Search_UI() {
     setSearchParams(params, { replace: true });
 
     if (searchText.trim()) {
-        const activities = JSON.parse(localStorage.getItem("recentActivities") || "[]");
-        // unshift để đẩy hoạt động mới lên đầu mảng
-        activities.unshift({
-            id: Date.now(),
-            type: "search",
-            title: `Tìm kiếm từ khóa: "${searchText}"`,
-            timestamp: new Date().toISOString(),
-            link: `/browse?title=${searchText}`
-        });
-        // Chỉ lưu tối đa 50 hoạt động gần nhất để không làm nặng trình duyệt
-        localStorage.setItem("recentActivities", JSON.stringify(activities.slice(0, 50)));
+      const activities = JSON.parse(
+        localStorage.getItem("recentActivities") || "[]",
+      );
+      // unshift để đẩy hoạt động mới lên đầu mảng
+      activities.unshift({
+        id: Date.now(),
+        type: "search",
+        title: `Tìm kiếm từ khóa: "${searchText}"`,
+        timestamp: new Date().toISOString(),
+        link: `/?title=${searchText}`,
+      });
+      // Chỉ lưu tối đa 50 hoạt động gần nhất để không làm nặng trình duyệt
+      localStorage.setItem(
+        "recentActivities",
+        JSON.stringify(activities.slice(0, 50)),
+      );
     }
   }
 
@@ -239,15 +255,21 @@ export default function Search_UI() {
           <div className="bg-surface-container-low dark:bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm">
             <div className="flex items-center justify-between mb-lg">
               <div className="flex items-center gap-sm">
-                <span className="material-symbols-outlined text-primary">filter_list</span>
+                <span className="material-symbols-outlined text-primary">
+                  filter_list
+                </span>
                 <h2 className="font-headline-sm text-headline-sm">Bộ lọc</h2>
               </div>
             </div>
 
             <div className="mb-lg">
               <div className="flex items-center justify-between mb-sm cursor-pointer group">
-                <span className="font-label-md text-label-md uppercase text-outline">Địa điểm</span>
-                <span className="material-symbols-outlined text-sm">keyboard_arrow_up</span>
+                <span className="font-label-md text-label-md uppercase text-outline">
+                  Địa điểm
+                </span>
+                <span className="material-symbols-outlined text-sm">
+                  keyboard_arrow_up
+                </span>
               </div>
               <div className="relative">
                 <input
@@ -257,13 +279,17 @@ export default function Search_UI() {
                   value={cityText}
                   onChange={(e) => setCityText(e.target.value)}
                 />
-                <span className="material-symbols-outlined absolute right-3 top-2 text-outline text-lg">search</span>
+                <span className="material-symbols-outlined absolute right-3 top-2 text-outline text-lg">
+                  search
+                </span>
               </div>
             </div>
 
             <div className="mb-lg">
               <div className="flex items-center justify-between mb-sm">
-                <span className="font-label-md text-label-md uppercase text-outline">Mức lương</span>
+                <span className="font-label-md text-label-md uppercase text-outline">
+                  Mức lương
+                </span>
               </div>
               <div className="px-xs py-md">
                 <input
@@ -284,18 +310,25 @@ export default function Search_UI() {
 
             <div className="mb-lg">
               <div className="flex items-center justify-between mb-sm">
-                <span className="font-label-md text-label-md uppercase text-outline">Danh mục</span>
+                <span className="font-label-md text-label-md uppercase text-outline">
+                  Danh mục
+                </span>
               </div>
               <div className="flex flex-col gap-sm">
                 {categoryOptions.map((option) => (
-                  <label key={option.id} className="flex items-center gap-sm cursor-pointer group">
+                  <label
+                    key={option.id}
+                    className="flex items-center gap-sm cursor-pointer group"
+                  >
                     <input
                       type="checkbox"
                       checked={selectedCategories.includes(option.label)}
                       onChange={() => handleCategoryChange(option)}
                       className="w-5 h-5 rounded border-outline-variant text-primary focus:ring-primary"
                     />
-                    <span className="text-body-sm group-hover:text-primary transition-colors">{option.label}</span>
+                    <span className="text-body-sm group-hover:text-primary transition-colors">
+                      {option.label}
+                    </span>
                   </label>
                 ))}
               </div>
@@ -303,7 +336,9 @@ export default function Search_UI() {
 
             <div className="mb-lg">
               <div className="flex items-center justify-between mb-sm">
-                <span className="font-label-md text-label-md uppercase text-outline">Hình thức</span>
+                <span className="font-label-md text-label-md uppercase text-outline">
+                  Hình thức
+                </span>
               </div>
               <div className="flex flex-wrap gap-xs">
                 {workTypeOptions.map((option) => (
@@ -334,8 +369,12 @@ export default function Search_UI() {
           </div>
 
           <div className="bg-primary-container rounded-xl p-md text-on-primary-container">
-            <h3 className="font-headline-sm text-headline-sm mb-xs">Mở rộng cơ hội?</h3>
-            <p className="text-body-sm opacity-90 mb-md">Tham gia các khóa học ngắn hạn để tăng tỷ lệ được tuyển dụng.</p>
+            <h3 className="font-headline-sm text-headline-sm mb-xs">
+              Mở rộng cơ hội?
+            </h3>
+            <p className="text-body-sm opacity-90 mb-md">
+              Tham gia các khóa học ngắn hạn để tăng tỷ lệ được tuyển dụng.
+            </p>
             <button className="w-full py-sm bg-white text-primary font-bold rounded-lg hover:bg-opacity-90 transition-all text-label-md">
               Xem khóa học
             </button>
@@ -346,12 +385,17 @@ export default function Search_UI() {
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-md mb-xl">
             <div>
               <h1 className="font-headline-md text-headline-md text-on-surface">
-                Tìm thấy <span className="text-primary">{totaljobs}</span> công việc
+                Tìm thấy <span className="text-primary">{totaljobs}</span> công
+                việc
               </h1>
-              <p className="text-body-sm text-on-surface-variant">Việc làm mới nhất được cập nhật mỗi 3 phút</p>
+              <p className="text-body-sm text-on-surface-variant">
+                Việc làm mới nhất được cập nhật mỗi 3 phút
+              </p>
             </div>
             <div className="flex items-center gap-sm">
-              <span className="text-body-sm text-on-surface-variant font-medium">Sắp xếp:</span>
+              <span className="text-body-sm text-on-surface-variant font-medium">
+                Sắp xếp:
+              </span>
               <div className="relative">
                 <select
                   value={sortBy}
@@ -374,15 +418,22 @@ export default function Search_UI() {
                     </option>
                   ))}
                 </select>
-                <span className="material-symbols-outlined absolute right-2 top-2 pointer-events-none">expand_more</span>
+                <span className="material-symbols-outlined absolute right-2 top-2 pointer-events-none">
+                  expand_more
+                </span>
               </div>
             </div>
           </div>
 
           <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md mb-xl">
-            <form onSubmit={handleSearch} className="grid gap-md lg:grid-cols-[1.8fr_1fr_1fr_auto] items-end">
+            <form
+              onSubmit={handleSearch}
+              className="grid gap-md lg:grid-cols-[1.8fr_1fr_1fr_auto] items-end"
+            >
               <div className="flex flex-col gap-2">
-                <label className="font-label-sm text-label-sm text-on-surface-variant">Tìm kiếm</label>
+                <label className="font-label-sm text-label-sm text-on-surface-variant">
+                  Tìm kiếm
+                </label>
                 <input
                   type="text"
                   placeholder="Vị trí, kỹ năng hoặc công ty"
@@ -393,7 +444,9 @@ export default function Search_UI() {
               </div>
 
               <div className="flex flex-col gap-2">
-                <label className="font-label-sm text-label-sm text-on-surface-variant">Thành phố</label>
+                <label className="font-label-sm text-label-sm text-on-surface-variant">
+                  Thành phố
+                </label>
                 <input
                   type="text"
                   placeholder="HCM, Hà Nội,..."
@@ -404,7 +457,9 @@ export default function Search_UI() {
               </div>
 
               <div className="flex flex-col gap-2">
-                <label className="font-label-sm text-label-sm text-on-surface-variant">Mức lương tối đa</label>
+                <label className="font-label-sm text-label-sm text-on-surface-variant">
+                  Mức lương tối đa
+                </label>
                 <div className="w-full flex items-center gap-3">
                   <input
                     type="range"
@@ -415,7 +470,9 @@ export default function Search_UI() {
                     onChange={(e) => setSalaryMax(Number(e.target.value))}
                     className="w-full h-2 bg-secondary-container rounded-lg appearance-none cursor-pointer accent-primary"
                   />
-                  <span className="text-body-sm font-bold text-on-surface">{salaryMax}tr</span>
+                  <span className="text-body-sm font-bold text-on-surface">
+                    {salaryMax}tr
+                  </span>
                 </div>
               </div>
 
@@ -430,7 +487,10 @@ export default function Search_UI() {
 
           <div className="flex flex-wrap gap-2 mb-lg">
             {filterLabel.map((item) => (
-              <span key={item} className="bg-surface-container-high px-md py-2 rounded-full text-body-sm text-on-surface-variant">
+              <span
+                key={item}
+                className="bg-surface-container-high px-md py-2 rounded-full text-body-sm text-on-surface-variant"
+              >
                 {item}
               </span>
             ))}
@@ -468,16 +528,20 @@ export default function Search_UI() {
                       </div>
                     </div>
                     <Bookmark
-                      className={`w-5 h-5 transition-colors ${savedJobIds.has(job.id) ? 'text-primary' : 'text-on-surface-variant'}`}
-                      fill={savedJobIds.has(job.id) ? 'currentColor' : 'none'}
+                      className={`w-5 h-5 transition-colors ${savedJobIds.has(job.id) ? "text-primary" : "text-on-surface-variant"}`}
+                      fill={savedJobIds.has(job.id) ? "currentColor" : "none"}
                     />
                   </div>
 
                   <div className="mt-auto">
-                    <div className="text-primary font-bold text-headline-sm mb-sm">{formatSalary(job)}</div>
+                    <div className="text-primary font-bold text-headline-sm mb-sm">
+                      {formatSalary(job)}
+                    </div>
                     <div className="flex justify-between items-center text-on-surface-variant text-body-sm">
                       <span className="flex items-center gap-1">
-                        <span className="material-symbols-outlined text-[16px]">schedule</span>
+                        <span className="material-symbols-outlined text-[16px]">
+                          schedule
+                        </span>
                         {formatPostedTime(job)}
                       </span>
                       <span className="bg-secondary-container px-sm py-[2px] rounded text-on-secondary-container text-label-sm">
@@ -492,14 +556,14 @@ export default function Search_UI() {
 
           {hasNext && (
             <div className="mt-xl text-center">
-                <button
+              <button
                 type="button"
                 onClick={() => fetchJobs({ loadMore: true })}
                 disabled={loading}
                 className="inline-flex items-center justify-center px-4 py-3 rounded-xl bg-primary text-on-primary font-bold hover:bg-primary-container transition-all disabled:opacity-60"
-                >
+              >
                 {loading ? "Đang tải thêm..." : "Xem thêm"}
-                </button>
+              </button>
             </div>
           )}
         </section>

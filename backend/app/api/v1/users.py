@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, func, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from core.timezone import to_vn_time
@@ -11,10 +11,8 @@ from models.user import User
 from models.association import SavedJob, AppliedJob
 from models.job import Job
 from schemas.common import ApiResponse
-from schemas.user import UserProfileResponse
+from schemas.user import RecommendedJobsQuery, RecommendedJobsResponse, UserProfileResponse
 from schemas.job import JobResponse, SavedJobsResponse
-
-from schemas.user import UserProfileResponse
  
 router = APIRouter()
 
@@ -54,6 +52,143 @@ async def get_profile(
     }
  
     return ApiResponse(data=data)
+
+
+@router.get("/recommended-jobs")
+async def get_recommended_jobs(
+    query: RecommendedJobsQuery = Depends(),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from models.user_profile import UserProfile
+
+    profile = await db.scalar(
+        select(UserProfile).where(UserProfile.user_id == current_user.id)
+    )
+    profile_city = profile.city.strip() if profile and profile.city else None
+    normalized_city = profile_city.lower() if profile_city else None
+
+    filters = []
+    if profile and profile.favorite_jobs:
+        filters.append(Job.job_type.in_(profile.favorite_jobs))
+        for term in profile.favorite_jobs:
+            wildcard = f"%{term}%"
+            filters.append(
+                or_(
+                    Job.title.ilike(wildcard),
+                    Job.post_content.ilike(wildcard),
+                    Job.employer_name.ilike(wildcard),
+                )
+            )
+    if profile and profile.skills:
+        for term in profile.skills:
+            wildcard = f"%{term}%"
+            filters.append(
+                or_(
+                    Job.title.ilike(wildcard),
+                    Job.post_content.ilike(wildcard),
+                    Job.employer_name.ilike(wildcard),
+                )
+            )
+
+    salary_filter = None
+    if profile and profile.expected_salary is not None:
+        salary_filter = or_(
+            Job.min_salary == None,
+            Job.max_salary == None,
+            and_(Job.min_salary <= profile.expected_salary, Job.max_salary >= profile.expected_salary),
+            Job.min_salary <= profile.expected_salary,
+            Job.max_salary >= profile.expected_salary,
+        )
+
+    def apply_filters(stmt):
+        if salary_filter is not None:
+            stmt = stmt.where(salary_filter)
+        if filters:
+            stmt = stmt.where(or_(*filters))
+        return stmt
+
+    def build_profile_stmt():
+        stmt = select(Job)
+        if normalized_city:
+            stmt = stmt.where(func.lower(func.trim(Job.city)) == normalized_city)
+        stmt = apply_filters(stmt)
+        stmt = stmt.order_by(Job.id.desc()).limit(20)
+        return stmt
+
+    def build_profile_count_stmt():
+        stmt = select(func.count()).select_from(Job)
+        if normalized_city:
+            stmt = stmt.where(func.lower(func.trim(Job.city)) == normalized_city)
+        stmt = apply_filters(stmt)
+        return stmt
+
+    def build_nearby_stmt():
+        stmt = select(Job).where(Job.lat.isnot(None), Job.lng.isnot(None))
+        if query.lat is not None and query.lng is not None:
+            earth_radius = 6371.0
+            user_lat_rad = func.radians(query.lat)
+            user_lng_rad = func.radians(query.lng)
+            job_lat_rad = func.radians(Job.lat)
+            job_lng_rad = func.radians(Job.lng)
+
+            haversine_formula = (
+                2 * earth_radius * func.asin(
+                    func.sqrt(
+                        func.pow(func.sin((job_lat_rad - user_lat_rad) / 2), 2)
+                        + func.cos(user_lat_rad)
+                        * func.cos(job_lat_rad)
+                        * func.pow(func.sin((job_lng_rad - user_lng_rad) / 2), 2)
+                    )
+                )
+            )
+            stmt = stmt.where(haversine_formula <= query.radius)
+        stmt = apply_filters(stmt)
+        stmt = stmt.order_by(Job.id.desc()).limit(20)
+        return stmt
+
+    def build_nearby_count_stmt():
+        stmt = select(func.count()).select_from(Job).where(Job.lat.isnot(None), Job.lng.isnot(None))
+        if query.lat is not None and query.lng is not None:
+            earth_radius = 6371.0
+            user_lat_rad = func.radians(query.lat)
+            user_lng_rad = func.radians(query.lng)
+            job_lat_rad = func.radians(Job.lat)
+            job_lng_rad = func.radians(Job.lng)
+
+            haversine_formula = (
+                2 * earth_radius * func.asin(
+                    func.sqrt(
+                        func.pow(func.sin((job_lat_rad - user_lat_rad) / 2), 2)
+                        + func.cos(user_lat_rad)
+                        * func.cos(job_lat_rad)
+                        * func.pow(func.sin((job_lng_rad - user_lng_rad) / 2), 2)
+                    )
+                )
+            )
+            stmt = stmt.where(haversine_formula <= query.radius)
+        stmt = apply_filters(stmt)
+        return stmt
+
+    profile_jobs = list(await db.scalars(build_profile_stmt()))
+    profile_count = int(await db.scalar(build_profile_count_stmt()) or 0)
+    nearby_jobs = []
+    nearby_count = 0
+
+    if query.lat is not None and query.lng is not None:
+        nearby_jobs = list(await db.scalars(build_nearby_stmt()))
+        nearby_count = int(await db.scalar(build_nearby_count_stmt()) or 0)
+
+    return ApiResponse(
+        data={
+            "total_matching_jobs": profile_count,
+            "nearby_matching_jobs": nearby_count,
+            "radius": query.radius,
+            "profile_jobs": [JobResponse.model_validate(j) for j in profile_jobs],
+            "nearby_jobs": [JobResponse.model_validate(j) for j in nearby_jobs],
+        }
+    )
+
 
 @router.post("/profile", status_code=201)
 async def create_profile(

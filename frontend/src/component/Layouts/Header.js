@@ -6,11 +6,11 @@ import { NavLink } from "react-router-dom";
 const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:8000";
 
 const navItems = [
-  { label: "Home", path: "/browse" },
-  { label: "Dashboard", path: "/" },
+  { label: "Home", path: "/" },
+  { label: "Dashboard", path: "/dashboard" },
   { label: "Profile", path: "/profile" },
   { label: "Jobs", path: "/jobs" },
-  { label: "Map", path: "/jobs/map" },
+  { label: "Map", path: "/map" },
 ];
 
 export default function Header() {
@@ -118,7 +118,7 @@ export default function Header() {
       setIsSettingsOpen(false);
 
       // F5 lại trang và đá về trang login (Dùng window.location để reset toàn bộ State React)
-      window.location.href = "/browse";
+      window.location.href = "/";
     }
   };
 
